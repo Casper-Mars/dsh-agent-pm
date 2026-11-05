@@ -1,17 +1,17 @@
 /**
  * 固件 SKILL 的加载、解析与 `ctx.skills.register()` 参数构造。
  *
- * 同源：`dsh-agent-dev/src/firmware.ts @ bc78f02`（三仓 dev / pm / cto 同改，见方案 §6.4）。
- * 本文件在任务-01 为骨架复制件，逻辑不改；错误信息前缀与领域标识由任务-03
- * 随 `src/domain.ts` / `src/persona.ts` 一并收敛。
+ * 同源：`dsh-agent-dev/src/firmware.ts @ bc78f02`。只把报错前缀从 `[dev]` 换成
+ * `[pm]`，加载器语义（SKILL.md 读取、frontmatter 解析、正文去 frontmatter、
+ * SkillRegistration 构造）与 dev 完全一致。
  *
  * 背景（任务-02 修复）：core 的 `registerFirmwareSkills()` 只注册 **core 自己**
  * 的 3 个固件 SKILL（`rsi-evolution` / `skill-authorship` / `task-authorship`），
  * 领域声明仅用于**重名冲突校验** —— core **不会**注册领域声明的 markdown。
  * 因此领域侧必须自己把这批 SKILL 静态注册进 `ctx.skills`，
- * 否则挂载后 `skills.get('dev-dispatch-contract')` 拿不到任何东西。
+ * 否则挂载后 `skills.get('pm-prd')` 拿不到任何东西。
  *
- * 注：Leader 的行为规则不在固件里，而是并入 `src/persona.ts` 的 `LEADER_PERSONA`
+ * 注：PM 的行为规则不在固件里，而是并入 `src/persona.ts` 的 `PM_PERSONA`
  * （由插件注入主会话人设）。
  *
  * 本模块只做三件事（全部无副作用、可单测）：
@@ -87,7 +87,7 @@ export function parseFirmwareSkillMarkdown(
   const match = FRONTMATTER_PATTERN.exec(normalized)
   if (match === null) {
     throw new Error(
-      `[dev] 固件 SKILL "${source}" 缺少 YAML frontmatter（必须以 "${FRONTMATTER_FENCE}" 开头并以 "${FRONTMATTER_FENCE}" 结束）`,
+      `[pm] 固件 SKILL "${source}" 缺少 YAML frontmatter（必须以 "${FRONTMATTER_FENCE}" 开头并以 "${FRONTMATTER_FENCE}" 结束）`,
     )
   }
 
@@ -105,7 +105,7 @@ export function parseFirmwareSkillMarkdown(
   for (const key of ['name', 'description', 'whenToUse'] as const) {
     const value = fields.get(key)?.trim()
     if (value === undefined || value === '') {
-      throw new Error(`[dev] 固件 SKILL "${source}" 的 frontmatter 缺少非空字段 "${key}"`)
+      throw new Error(`[pm] 固件 SKILL "${source}" 的 frontmatter 缺少非空字段 "${key}"`)
     }
   }
 
@@ -140,7 +140,7 @@ export function loadFirmwareMarkdown(name: string, dir?: string): string {
     return readFileSync(path, 'utf8')
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
-    throw new Error(`[dev] 无法读取固件 SKILL "${path}"：${reason}`)
+    throw new Error(`[pm] 无法读取固件 SKILL "${path}"：${reason}`)
   }
 }
 
@@ -162,7 +162,7 @@ export function buildFirmwareSkillRegistration(skill: FirmwareSkill): SkillRegis
   const parsed = parseFirmwareSkillMarkdown(markdown, path)
   if (parsed.name !== skill.name) {
     throw new Error(
-      `[dev] 固件 SKILL 声明名与 frontmatter.name 不一致：声明 "${skill.name}"、frontmatter "${parsed.name}"（${path}）`,
+      `[pm] 固件 SKILL 声明名与 frontmatter.name 不一致：声明 "${skill.name}"、frontmatter "${parsed.name}"（${path}）`,
     )
   }
 

@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
+import { inject as pluginInject, name as pluginName } from '../src/plugin'
 
 const PATCH_FILE = fileURLToPath(new URL('../cordis.patch.yml', import.meta.url))
 const SOURCE = readFileSync(PATCH_FILE, 'utf8')
@@ -43,10 +44,18 @@ describe('cordis.patch.yml 结构', () => {
     ])
   })
 
-  it('领域插件条目与 src/plugin.ts 对齐（name / inject / 无 config）', () => {
+  it('pm-domain 条目的 name / inject 与 src/plugin.ts 逐项一致（且无 config）', () => {
     const entry = byId('pm-domain')
+
+    // 单一真源：plugin 导出即契约，patch 必须逐项照抄。
+    expect(pluginName).toBe('pm-domain')
+    expect(pluginInject).toEqual(['skills', 'agents'])
+
+    // patch 的 `id` 是插件实例 id，对应 plugin 导出的 name；
+    // `name` 是 npm 包名，用于解析模块，两者不是同一个字段。
+    expect(entry.id).toBe(pluginName)
     expect(entry.name).toBe('dsh-agent-pm')
-    expect(entry.inject).toEqual(['skills', 'agents'])
+    expect(entry.inject).toEqual(pluginInject)
     expect(entry.config).toBeUndefined()
   })
 

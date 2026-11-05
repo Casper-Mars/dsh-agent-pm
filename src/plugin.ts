@@ -1,28 +1,28 @@
 /**
- * `dev-domain` 插件契约层：原生 Cordis 插件（任务-03）。
+ * `pm-domain` 插件契约层：原生 Cordis 插件（任务-03）。
  *
- * 骨架复制件（任务-01）：与 `dsh-agent-dev/src/plugin.ts @ bc78f02` 同源，逻辑未改。
- * 角色化改写（`name` / 日志 tag / 人设来源 / `src/domain.ts` 导入）由任务-03 完成。
+ * 与 `dsh-agent-dev/src/plugin.ts @ bc78f02` 同源：只替换领域常量、插件 id 与
+ * 日志 / fiber 标签，注册语义、回滚、LIFO 卸载、depth gate 一律不变。
  *
- * 本包是 `dev` 领域插件，只依赖 dsh 标准服务：
- *   - `skills`：注册 8 个领域 Skill（正文由 `skills/<name>/SKILL.md` 读取）；
- *   - `agents`：监听 agent 生命周期，只给 **depth 0** 根会话注入 Leader persona。
+ * 本包是 `pm` 领域插件，只依赖 dsh 标准服务：
+ *   - `skills`：注册 1 个领域 Skill（正文由 `skills/<name>/SKILL.md` 读取）；
+ *   - `agents`：监听 agent 生命周期，只给 **depth 0** 根会话注入 PM persona。
  *
- * 不再依赖旧核心的私有装配服务。领域数据来自 `src/domain.ts`，
- * Skill 正文与 frontmatter 由 `src/firmware.ts` 的加载器读取。
+ * 领域数据来自 `src/domain.ts`，Skill 正文与 frontmatter 由 `src/firmware.ts`
+ * 的加载器读取。不引入 tool-subagent / agentPreset 控制面逻辑。
  */
 import type { Context, Fiber } from '@deepseek-ai/cordis'
 import type { SkillRegistration } from '@deepseek-ai/dsh-skill'
-import { DEV_DOMAIN } from './domain.js'
-import { LEADER_PERSONA } from './persona.js'
+import { PM_DOMAIN } from './domain.js'
+import { PM_PERSONA } from './persona.js'
 import {
   planFirmwareSkillRegistrations,
   type FirmwareSkill,
   type SkippedFirmwareSkill,
 } from './firmware.js'
 
-/** 插件唯一标识（必须与 `cordis.patch.yml` 中的 `dev-domain` 一致）。 */
-export const name = 'dev-domain'
+/** 插件唯一标识（必须与 `cordis.patch.yml` 中的 `pm-domain` 一致）。 */
+export const name = 'pm-domain'
 
 /**
  * 依赖的 dsh 标准服务。
@@ -34,7 +34,7 @@ export const name = 'dev-domain'
  */
 export const inject: string[] = ['skills', 'agents']
 
-/** Leader persona 占用的 system prompt 槽位（与 dsh-persona 的根槽位一致）。 */
+/** PM persona 占用的 system prompt 槽位（与 dsh-persona 的根槽位一致）。 */
 const PERSONA_SECTION = 'deployment:persona-prefix'
 
 /* ------------------------------------------------------------------ *
@@ -223,7 +223,7 @@ function verifyRegistrationWinner(
 }
 
 /**
- * 把领域声明的 8 个 Skill 静态注册进 `ctx.skills`。
+ * 把领域声明的 Skill 静态注册进 `ctx.skills`。
  *
  * 降级语义：`ctx.skills` 缺失或不支持 `register()` 时只 warn，返回空数组，
  * **不阻断**插件装配。注册中途失败会回滚已注册项后抛出，调用方负责同时拆卸
@@ -233,13 +233,13 @@ function verifyRegistrationWinner(
  */
 export function registerDomainFirmwareSkills(
   ctx: Context,
-  skills: readonly FirmwareSkill[] | undefined = DEV_DOMAIN.skills,
-  logger: DomainLogger = createDomainLogger(readService(ctx, 'logger'), 'dev-domain'),
+  skills: readonly FirmwareSkill[] | undefined = PM_DOMAIN.skills,
+  logger: DomainLogger = createDomainLogger(readService(ctx, 'logger'), 'pm-domain'),
 ): Array<() => void> {
   const registry = readSkillRegistry(ctx)
   if (registry === undefined) {
     logger.warn(
-      'ctx.skills 缺失或不支持 register()，跳过领域 Skill 注册（降级：8 个 dev-* Skill 在会话中不可见）',
+      'ctx.skills 缺失或不支持 register()，跳过领域 Skill 注册（降级：本包 pm-* Skill 在会话中不可见）',
     )
     return []
   }
@@ -277,7 +277,7 @@ export function registerDomainFirmwareSkills(
       }
     }
     const detail = error instanceof Error ? error.message : String(error)
-    throw new Error(`[dev] 注册领域 Skill 失败（已回滚 [${rolledBack.join(', ')}]）：${detail}`)
+    throw new Error(`[pm] 注册领域 Skill 失败（已回滚 [${rolledBack.join(', ')}]）：${detail}`)
   }
 
   // 反注册时同步释放查重占位，保证「卸载后再装」可以重新注册。
@@ -291,7 +291,7 @@ export function registerDomainFirmwareSkills(
 }
 
 /* ------------------------------------------------------------------ *
- * Leader persona 生命周期（per-agent，depth 0 only）
+ * PM persona 生命周期（per-agent，depth 0 only）
  * ------------------------------------------------------------------ */
 
 /** `agent.session.header` 的最小结构。 */
@@ -385,14 +385,14 @@ interface PersonaEntry {
 }
 
 /**
- * 根会话 Leader persona 注入器。
+ * 根会话 PM persona 注入器。
  *
  * - `agent/created`：显式 depth gate，仅 depth 0；同一 agent 幂等；
  * - `agent/disposed`：dispose 自己记录的 fiber 并从 Map 删除；
  * - `installExisting()`：补装插件加载前已经存在的 agent；
  * - `disposeAll()`：插件卸载时清理所有残留 fiber。
  */
-class LeaderPersonaInjector {
+class PmPersonaInjector {
   private readonly entries = new Map<string, PersonaEntry>()
   private readonly injected = new WeakSet<object>()
   private readonly warned = new Set<string>()
@@ -406,14 +406,14 @@ class LeaderPersonaInjector {
   installExisting(): void {
     const registry = readAgentRegistry(this.ctx)
     if (registry === undefined) {
-      this.warnOnce('agents-missing', 'ctx.agents 不可用，跳过已存在 agent 的 Leader persona 补装')
+      this.warnOnce('agents-missing', 'ctx.agents 不可用，跳过已存在 agent 的 PM persona 补装')
       return
     }
     let agents: readonly AgentLike[]
     try {
       agents = registry.list()
     } catch (error) {
-      this.logger.warn('读取 ctx.agents.list() 失败，跳过 Leader persona 补装', error)
+      this.logger.warn('读取 ctx.agents.list() 失败，跳过 PM persona 补装', error)
       return
     }
     for (const agent of agents) {
@@ -462,7 +462,7 @@ class LeaderPersonaInjector {
     if (!isSystemPromptLike(systemPrompt)) {
       this.warnOnce(
         'systemPrompt-missing',
-        'agent scope 缺少 systemPrompt 服务，Leader persona 降级为不注入（Skill 注册不受影响）',
+        'agent scope 缺少 systemPrompt 服务，PM persona 降级为不注入（Skill 注册不受影响）',
       )
       // 不记住这次失败：systemPrompt 之后可用时（例如 resume）仍要能补装。
       this.injected.delete(agent)
@@ -484,13 +484,13 @@ class LeaderPersonaInjector {
           const disposeSection = prompt.section({
             name: PERSONA_SECTION,
             order: prompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
-            text: LEADER_PERSONA,
+            text: PM_PERSONA,
           })
           return disposeSection
-        }, 'dev-domain:leader-persona')
+        }, 'pm-domain:leader-persona')
       }) as Fiber
     } catch (error) {
-      this.logger.warn(`为 agent ${String(agent.id)} 注入 Leader persona 失败`, error)
+      this.logger.warn(`为 agent ${String(agent.id)} 注入 PM persona 失败`, error)
       this.injected.delete(agent)
       return
     }
@@ -501,7 +501,7 @@ class LeaderPersonaInjector {
     try {
       await fiber
     } catch (error) {
-      this.logger.warn(`Leader persona fiber 加载失败（agent=${String(agent.id)}）`, error)
+      this.logger.warn(`PM persona fiber 加载失败（agent=${String(agent.id)}）`, error)
       this.injected.delete(agent)
       if (this.entries.get(agent.id) === entry) this.entries.delete(agent.id)
     }
@@ -514,7 +514,7 @@ class LeaderPersonaInjector {
     try {
       await entry.fiber.dispose()
     } catch (error) {
-      this.logger.warn(`释放 Leader persona fiber 失败（${reason}）`, error)
+      this.logger.warn(`释放 PM persona fiber 失败（${reason}）`, error)
     }
   }
 
@@ -531,11 +531,11 @@ class LeaderPersonaInjector {
 
 /** 插件装配入口。 */
 export function apply(ctx: Context): void {
-  const logger = createDomainLogger(readService(ctx, 'logger'), 'dev-domain')
+  const logger = createDomainLogger(readService(ctx, 'logger'), 'pm-domain')
 
-  // 1) 8 个领域 Skill：注册 / 回滚 / LIFO 反注册全部交给 ctx.effect 管理。
+  // 1) 领域 Skill：注册 / 回滚 / LIFO 反注册全部交给 ctx.effect 管理。
   ctx.effect(() => {
-    const unregisters = registerDomainFirmwareSkills(ctx, DEV_DOMAIN.skills, logger)
+    const unregisters = registerDomainFirmwareSkills(ctx, PM_DOMAIN.skills, logger)
 
     return () => {
       // 反注册顺序与注册顺序相反（LIFO）。
@@ -547,10 +547,10 @@ export function apply(ctx: Context): void {
         }
       }
     }
-  }, 'dev-domain:register-skills')
+  }, 'pm-domain:register-skills')
 
-  // 2) Leader persona：agent 生命周期监听 + 插件卸载统一清理。
-  const personas = new LeaderPersonaInjector(ctx, logger)
+  // 2) PM persona：agent 生命周期监听 + 插件卸载统一清理。
+  const personas = new PmPersonaInjector(ctx, logger)
   const events = ctx as unknown as AgentEventContext
 
   ctx.effect(() => {
@@ -562,7 +562,7 @@ export function apply(ctx: Context): void {
       offDisposed()
       await personas.disposeAll()
     }
-  }, 'dev-domain:leader-persona-lifecycle')
+  }, 'pm-domain:leader-persona-lifecycle')
 
   // 3) 补装插件加载前已经存在的根 agent（幂等，created 仍会正常触发）。
   personas.installExisting()

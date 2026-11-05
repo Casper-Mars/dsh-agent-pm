@@ -8,6 +8,7 @@
  */
 import { dirname, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { PM_DOMAIN } from '../src/domain'
 import {
   buildFirmwareSkillRegistration,
   parseFirmwareSkillMarkdown,
@@ -125,7 +126,27 @@ describe('buildFirmwareSkillRegistration', () => {
     expect(registration.description).toBe('声明侧描述')
   })
 
-  it.todo('domain 声明接入后：全部领域 Skill 的注册参数逐项合规（任务-02）')
+  it('domain 声明的全部 Skill 注册参数逐项合规', () => {
+    expect(PM_DOMAIN.skills.length).toBeGreaterThan(0)
+
+    for (const skill of PM_DOMAIN.skills) {
+      const registration = buildFirmwareSkillRegistration(skill)
+
+      expect(registration.name).toBe(skill.name)
+      expect(registration.source).toBe('runtime')
+      expect(registration.invocation).toEqual({ modelInvocable: true, userInvocable: true })
+      expect((registration.description as string).trim().length).toBeGreaterThan(0)
+      expect((registration.whenToUse as string).trim().length).toBeGreaterThan(0)
+
+      const path = registration.path as string
+      expect(path.startsWith('/')).toBe(true)
+      expect(path.endsWith(join('skills', skill.name, 'SKILL.md'))).toBe(true)
+      expect(registration.resourceBase).toEqual({ kind: 'directory', path: dirname(path) })
+      expect(registration.content.startsWith('---')).toBe(false)
+      expect(registration.content).not.toContain('whenToUse:')
+      expect((registration.content as string).trim().length).toBeGreaterThan(0)
+    }
+  })
 })
 
 /* ------------------------------------------------------------------ *
