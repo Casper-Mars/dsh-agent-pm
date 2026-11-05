@@ -6,8 +6,9 @@
  * 旧版的「安装目录」硬编码与 `--home` / 环境变量默认推导已随任务-05 删除；
  * `--assets <dir>` 只用于手工核查其它资产目录，不再是默认路径。
  *
- * 本清单在任务-01 只保留 Skill 名称（方案 §3 / §4 已定名）；`EXPECTED_FILES`
- * 待任务-02 迁入 Skill 后按实际 `assets/` 与 `references/` 补齐（PM 目标 11 项）。
+ * 检查清单是本文件的唯一真源：`EXPECTED_SKILLS`（1 个）+ `EXPECTED_ASSETS`（1 个）
+ * + `EXPECTED_REFERENCES`（9 个）= 11 项，与包内 `skills/pm-prd/` 的实际布局逐项对应。
+ * 新增 / 删除随包文件时必须同步本清单与 `tests/verify-install.spec.ts` 的计数断言。
  *
  * 退出码：全 PASS 为 0，有 FAIL 为 1，参数 / 环境错误（目录不存在、未知参数）为 2。
  * 核心逻辑均为导出纯函数，`main` 仅在直接执行本文件时运行；导入本模块不跑 main、
@@ -25,9 +26,26 @@ export const EXPECTED_SKILLS = ['pm-prd']
  * 除 `SKILL.md` 外必须存在且非空的随包文件。
  *
  * 形如 `{ skill: 'pm-prd', file: 'references/mining.md' }`，`file` 相对
- * `<skillsRoot>/<skill>/`。任务-02 迁入 `pm-prd` 后按实际目录补齐。
+ * `<skillsRoot>/<skill>/`。按 `assets/` 与 `references/` 分组维护，`EXPECTED_FILES`
+ * 由两者派生，供检查逻辑与测试统一消费。
  */
-export const EXPECTED_FILES = []
+export const EXPECTED_ASSETS = [{ skill: 'pm-prd', file: 'assets/prd-template.md' }]
+
+/** `references/` 下的随包文件（9 个）。 */
+export const EXPECTED_REFERENCES = [
+  { skill: 'pm-prd', file: 'references/ac-examples.md' },
+  { skill: 'pm-prd', file: 'references/checklists.md' },
+  { skill: 'pm-prd', file: 'references/diagnosis.md' },
+  { skill: 'pm-prd', file: 'references/doc-checks.md' },
+  { skill: 'pm-prd', file: 'references/hackernews.md' },
+  { skill: 'pm-prd', file: 'references/language.md' },
+  { skill: 'pm-prd', file: 'references/mining.md' },
+  { skill: 'pm-prd', file: 'references/producthunt.md' },
+  { skill: 'pm-prd', file: 'references/v2ex.md' },
+]
+
+/** 全部随包文件 = assets + references（派生导出，勿另写一份）。 */
+export const EXPECTED_FILES = [...EXPECTED_ASSETS, ...EXPECTED_REFERENCES]
 
 /** 检查项总数：SKILL.md 数 + 随包文件数。 */
 export const EXPECTED_CHECK_COUNT = EXPECTED_SKILLS.length + EXPECTED_FILES.length

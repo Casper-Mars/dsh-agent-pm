@@ -4,7 +4,8 @@
  * 断言分三层：
  *   1. 外层形状：恰好一个 `insert` 条目，且**没有任何**直接挂在外层的覆盖条目；
  *   2. 插入顺序与身份：领域插件 / preset 注册表 / 唯一 preset，id 顺序固定；
- *   3. 工具面：恰好 5 个工具，顺序固定，逐项核验 name、tool-todo 参数与禁用项。
+ *   3. 工具面：恰好 5 个工具，顺序固定，逐项核验 name、tool-todo 参数与禁用项；
+ *   4. 工具面只允许 tool-todo 带 config，其余工具带 config 即失败（防误加覆盖）。
  *
  * 结构断言一律走真实 YAML 解析（`yaml` 包），不用正则猜结构；只有「全文禁词」
  * 用源码扫描，因为它要覆盖注释等非结构位置。
@@ -155,6 +156,14 @@ describe('cordis.patch.yml preset 配置', () => {
     const todo = presetPlugins().find((item) => item.id === 'tool-todo')
     expect(todo, 'preset.plugins 缺少 tool-todo').toBeDefined()
     expect(configOf(todo as PatchPlugin).allowParallelInProgress).toBe(false)
+  })
+
+  it('除 tool-todo 外的工具不得带 config（防止误加覆盖）', () => {
+    const others = presetPlugins().filter((item) => item.id !== 'tool-todo')
+    expect(others.length).toBeGreaterThan(0)
+    for (const item of others) {
+      expect(item.config, `"${String(item.id)}" 不应带 config`).toBeUndefined()
+    }
   })
 
   it('工具面必须含 tool-web，且不得出现 tool-subagent', () => {
