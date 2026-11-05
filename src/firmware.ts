@@ -204,7 +204,7 @@ export interface PlanFirmwareSkillOptions {
  *   1. 声明内部重名 → `duplicate-declaration`；
  *   2. 调用方 `skip(name)` 命中的（注册表已存在）→ `already-registered`。
  *
- * @param skills 领域 Skill 列表（`DEV_DOMAIN.skills`，可缺省）。
+ * @param skills 领域 Skill 列表（`PM_DOMAIN.skills`，可缺省）。
  * @param options 查重回调。
  */
 export function planFirmwareSkillRegistrations(
