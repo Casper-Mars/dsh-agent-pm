@@ -1,0 +1,85 @@
+{
+  "name": "dsh-agent-pm",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "市场部经理：需求洞察、需求诊断、PRD 与优先级",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "cordis-plugin",
+    "pm",
+    "domain"
+  ],
+  "author": "Casper <solitaryreach@163.com>",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=22.19.0",
+    "pnpm": ">=11.7.0"
+  },
+  "main": "dist-server/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist-server/types/index.d.ts",
+      "default": "./dist-server/index.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist-server/**/*.js",
+    "dist-server/types/**/*.d.ts",
+    "dist-server/**/*.md",
+    "dist-server/cordis.patch.yml",
+    "scripts/verify-install.mjs",
+    "skills/",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm clean && pnpm typecheck && tsc -p tsconfig.server.json && node scripts/copy-assets.mjs",
+    "build:server": "pnpm clean && tsc -p tsconfig.server.json && node scripts/copy-assets.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "verify:install": "node scripts/verify-install.mjs",
+    "clean": "rm -rf dist dist-server",
+    "prepublishOnly": "pnpm build"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.5",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-skill": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-skill-filesystem": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.2"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-skill": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-skill-filesystem": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.5",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-skill": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-skill-filesystem": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
+    "@types/node": "^22.13.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0",
+    "yaml": "^2.9.1"
+  }
+}

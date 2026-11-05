@@ -1,0 +1,39 @@
+# dsh-agent-pm bundle patch —— 单一角色：市场部经理（产品经理）
+#
+# 结构：一次 insert 完成三层装配 —— 本包领域插件（pm-domain）、preset 注册表默认值、
+# 以及唯一的 agent preset（preset-pm）。id / name / inject 必须与 src/plugin.ts 逐项一致。
+#
+# 本轮（任务-01）只保证「结构正确」；preset 工具面与断言细节由任务-04 补齐。
+# 硬约束：一个 profile 只装一个角色包（两个角色包都占用 registry.default 与人设槽位）。
+
+- insert:
+    - id: pm-domain
+      name: dsh-agent-pm
+      inject: ['skills', 'agents']
+
+    - id: agent-preset-registry
+      name: '@deepseek-ai/dsh-agent-preset-registry'
+      config:
+        # 主会话 + 驿传 ensureSession 的默认 preset 都取这里
+        default: pm
+
+    - id: preset-pm
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: pm
+        name: 产品经理
+        description: 市场部经理：需求洞察、需求诊断、PRD 与优先级。
+        order: 10
+        plugins:
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+          - id: tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: false
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
