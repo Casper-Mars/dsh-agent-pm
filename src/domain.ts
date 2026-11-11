@@ -49,7 +49,7 @@ function skill(name: string, description: string): PMSkill {
 /** `pm` 领域：10 个只读 Skill + PM 人设。 */
 export const PM_DOMAIN: PMDomain = {
   id: 'pm',
-  version: '0.2.0',
+  version: '0.2.1',
   displayName: 'PM Domain',
   personaMarkdown: PM_PERSONA,
   skills: [
