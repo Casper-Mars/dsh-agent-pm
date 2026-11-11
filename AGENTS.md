@@ -4,13 +4,13 @@
 
 ## 1. 这个仓库是什么
 
-`dsh-agent-pm` 是 dsh 的市场部经理（产品经理）领域**原生单包**，产物是「人设 + 只读 Skill +
-agent preset」，不是业务应用。
+`dsh-agent-pm` 是 dsh 的市场部经理（产品经理）领域**原生单包**，产物是「人设 + 10 个只读
+Skill + agent preset」，不是业务应用。
 
 - **原生单包**：不依赖任何外部 agent core 包；`dsh plugin add` 装本包即可。
 - **零工具**：本包不声明任何 tools 实现（无 `tools()`，也无 `toolNames` 字段）；能力由
   `cordis.patch.yml` 的 preset 组合 dsh 内置插件提供。
-- **零状态**：不写盘、不建资产目录、没有 bootstrap；`pm-prd` 只从包内 `skills/` 读取并注册。
+- **零状态**：不写盘、不建资产目录、没有 bootstrap；10 个 `pm-*` Skill 只从包内 `skills/` 读取并注册。
 - **只读 Skill**：Skill 正文不会被运行时改写。
 - **人设唯一来源**：`src/persona.ts` 的 `PM_PERSONA`，由插件注入 **depth 0 根会话**；
   `preset-pm` 不挂 persona。
@@ -18,17 +18,17 @@ agent preset」，不是业务应用。
 
 ## 2. 角色边界
 
-- 本包只承载**市场部经理（产品经理）**一个角色：需求洞察 → 需求诊断 → 定义范围与 AC → 交接技术与开发。
+- 本包只承载**市场部经理（产品经理）**一个角色：洞察 → 诊断 → 定义 → 排序 → 交接与交付 → 发布与复盘。
 - 不做技术选型、不写实施方案、不承诺排期与人日；需要技术结论时移交 CTO（`dsh-agent-cto`）。
 
 ## 3. 分层（谁能改什么）
 
 | 层 | 位置 | 规则 |
 |----|------|------|
-| Skill 正文 | `skills/pm-prd/SKILL.md` | 唯一真源，不在 `src/` 内联；正文必须点名每个随包文件 |
-| 随包文件 | `skills/pm-prd/assets/`、`skills/pm-prd/references/` | 只放被 `SKILL.md` 引用的模板与参考文档；新增 / 删除必须同步自检清单 |
+| Skill 正文 | `skills/<name>/SKILL.md` | 唯一真源，不在 `src/` 内联；每个技能正文必须点名自己的每个随包文件 |
+| 随包文件 | `skills/<name>/assets/`、`skills/<name>/references/` | 只放被该技能 `SKILL.md` 引用的模板与参考文档；新增 / 删除必须同步自检清单 |
 | Skill 元数据 | `src/domain.ts` | 增删技能时改，`dir` 一律 `import.meta.url` 推导 |
-| 人设 | `src/persona.ts` | 只改文案，不改导出名，≤ 70 行 |
+| 人设 | `src/persona.ts` | 只改文案，不改导出名，≤ 70 行；新增流程细则只能进 Skill |
 | 插件行为 | `src/plugin.ts` | 注册 / 回滚 / 人设生命周期 |
 | Skill 加载 | `src/firmware.ts` | 只解析 `name` / `description` / `whenToUse`，无副作用 |
 | 装配 | `cordis.patch.yml` | preset 与默认值，`id`/`name`/`inject` 必须与 `src/plugin.ts` 一致 |
@@ -41,8 +41,8 @@ agent preset」，不是业务应用。
 4. **Skill 资产双向可追溯**：`references/` 与 `assets/` 下每个文件都必须在 `SKILL.md` 正文被点名；
    正文点名的路径也必须真实存在（`tests/domain.spec.ts` 断言）。
 5. **自检清单与计数同步**：`scripts/verify-install.mjs` 的 `EXPECTED_SKILLS` / `EXPECTED_ASSETS` /
-   `EXPECTED_REFERENCES` 是唯一真源，当前 11 项（1 SKILL + 1 asset + 9 references）；增删文件必须同步
-   `tests/verify-install.spec.ts` 的计数断言与 README。
+   `EXPECTED_REFERENCES` 是唯一真源，当前 56 项（10 SKILL + 14 asset + 32 references）；增删文件必须同步
+   `tests/verify-install.spec.ts` 的计数断言、`tests/domain.spec.ts` 的技能清单与 README。
 6. frontmatter 只有 `name` / `description` / `whenToUse` 三个字段，单行扁平标量，`name` 必须等于目录名。
 7. 不在本仓库改 `dsh-agent-dev` / `dsh-domain` / `dsh-agent-cto`；不执行 `npm publish` / `pnpm publish`。
 8. 交付前跑 `pnpm typecheck`、`pnpm test`、`pnpm build`、`pnpm verify:install`；
@@ -53,9 +53,9 @@ agent preset」，不是业务应用。
 | 命令 | 作用 | 成功判据 |
 |------|------|----------|
 | `pnpm typecheck` | `tsc --noEmit` | 退出码 0 |
-| `pnpm test` | `vitest run`（5 个 spec） | 67 passed、0 failed、0 skipped |
+| `pnpm test` | `vitest run`（5 个 spec） | 130 passed、0 failed、0 skipped |
 | `pnpm build` | 清理 → 类型检查 → 编译 → 复制 patch | `dist-server/index.js` 与 `dist-server/cordis.patch.yml` 存在 |
-| `pnpm verify:install` | 包内 11 项资产自检 | 11 行 PASS、退出码 0 |
+| `pnpm verify:install` | 包内 56 项资产自检 | 56 行 PASS、退出码 0 |
 | `make check` | build → test → verify → pack | 全绿 |
 
 `verify:install` 默认检查包内 `skills/`，未安装也能全 PASS；`--assets <dir>` 只用于手工核查其它目录。
@@ -65,4 +65,5 @@ agent preset」，不是业务应用。
 - Conventional Commits：`<type>(<scope>): <描述>`，`type` ∈ `feat|fix|docs|test|chore`；
 - 一次逻辑改动一个 commit；提交前 `git status --short` 与 `git diff --stat` 只应有预期文件；
 - 不提交 `node_modules/`、`dist/`、`dist-server/`、日志与临时文件；
-- 技能数量 / 自检条数 / 命令 / 装配变化，必须在同一 commit 同步 `README.md` 与本文件。
+- 技能数量 / 自检条数 / 命令 / 装配变化，必须在同一 commit 同步 `README.md` 与本文件；
+当前基线：10 个技能、56 项自检、130 个测试用例。

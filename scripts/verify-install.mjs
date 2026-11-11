@@ -6,8 +6,8 @@
  * 旧版的「安装目录」硬编码与 `--home` / 环境变量默认推导已随任务-05 删除；
  * `--assets <dir>` 只用于手工核查其它资产目录，不再是默认路径。
  *
- * 检查清单是本文件的唯一真源：`EXPECTED_SKILLS`（1 个）+ `EXPECTED_ASSETS`（1 个）
- * + `EXPECTED_REFERENCES`（9 个）= 11 项，与包内 `skills/pm-prd/` 的实际布局逐项对应。
+ * 检查清单是本文件的唯一真源：`EXPECTED_SKILLS`（10 个）+ `EXPECTED_ASSETS`（14 个）
+ * + `EXPECTED_REFERENCES`（32 个）= 56 项，与包内 `skills/pm-prd/` 的实际布局逐项对应。
  * 新增 / 删除随包文件时必须同步本清单与 `tests/verify-install.spec.ts` 的计数断言。
  *
  * 退出码：全 PASS 为 0，有 FAIL 为 1，参数 / 环境错误（目录不存在、未知参数）为 2。
@@ -20,7 +20,18 @@ import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
 /** 期望的领域 Skill（与 `src/domain.ts` 的 `PM_DOMAIN.skills` 一致）。 */
-export const EXPECTED_SKILLS = ['pm-prd']
+export const EXPECTED_SKILLS = [
+  'pm-discovery',
+  'pm-prd',
+  'pm-prioritize',
+  'pm-handoff',
+  'pm-metrics',
+  'pm-competitive',
+  'pm-launch',
+  'pm-repo-ops',
+  'pm-stakeholder',
+  'pm-retro',
+]
 
 /**
  * 除 `SKILL.md` 外必须存在且非空的随包文件。
@@ -29,22 +40,59 @@ export const EXPECTED_SKILLS = ['pm-prd']
  * `<skillsRoot>/<skill>/`。按 `assets/` 与 `references/` 分组维护，`EXPECTED_FILES`
  * 由两者派生，供检查逻辑与测试统一消费。
  */
-export const EXPECTED_ASSETS = [{ skill: 'pm-prd', file: 'assets/prd-template.md' }]
-
-/** `references/` 下的随包文件（9 个）。 */
-export const EXPECTED_REFERENCES = [
-  { skill: 'pm-prd', file: 'references/ac-examples.md' },
-  { skill: 'pm-prd', file: 'references/checklists.md' },
-  { skill: 'pm-prd', file: 'references/diagnosis.md' },
-  { skill: 'pm-prd', file: 'references/doc-checks.md' },
-  { skill: 'pm-prd', file: 'references/hackernews.md' },
-  { skill: 'pm-prd', file: 'references/language.md' },
-  { skill: 'pm-prd', file: 'references/mining.md' },
-  { skill: 'pm-prd', file: 'references/producthunt.md' },
-  { skill: 'pm-prd', file: 'references/v2ex.md' },
+export const EXPECTED_ASSETS = [
+  { skill: 'pm-discovery', file: 'assets/diagnosis-card.md' },
+  { skill: 'pm-prd', file: 'assets/prd-template.md' },
+  { skill: 'pm-prd', file: 'assets/prfq-template.md' },
+  { skill: 'pm-prioritize', file: 'assets/prioritization-table.md' },
+  { skill: 'pm-handoff', file: 'assets/handoff-pack.md' },
+  { skill: 'pm-handoff', file: 'assets/change-request.md' },
+  { skill: 'pm-metrics', file: 'assets/metric-spec.md' },
+  { skill: 'pm-metrics', file: 'assets/experiment-plan.md' },
+  { skill: 'pm-competitive', file: 'assets/competitor-matrix.md' },
+  { skill: 'pm-launch', file: 'assets/launch-checklist.md' },
+  { skill: 'pm-launch', file: 'assets/release-notes.md' },
+  { skill: 'pm-repo-ops', file: 'assets/triage-comment.md' },
+  { skill: 'pm-stakeholder', file: 'assets/decision-memo.md' },
+  { skill: 'pm-retro', file: 'assets/retro-summary.md' },
 ]
 
-/** 全部随包文件 = assets + references（派生导出，勿另写一份）。 */
+/** `references/` 下的随包文件（32 个）。 */
+export const EXPECTED_REFERENCES = [
+  { skill: 'pm-discovery', file: 'references/diagnosis.md' },
+  { skill: 'pm-discovery', file: 'references/hackernews.md' },
+  { skill: 'pm-discovery', file: 'references/interview.md' },
+  { skill: 'pm-discovery', file: 'references/mining.md' },
+  { skill: 'pm-discovery', file: 'references/opportunity-tree.md' },
+  { skill: 'pm-discovery', file: 'references/producthunt.md' },
+  { skill: 'pm-discovery', file: 'references/v2ex.md' },
+  { skill: 'pm-prd', file: 'references/ac-examples.md' },
+  { skill: 'pm-prd', file: 'references/checklists.md' },
+  { skill: 'pm-prd', file: 'references/doc-checks.md' },
+  { skill: 'pm-prd', file: 'references/dor.md' },
+  { skill: 'pm-prd', file: 'references/language.md' },
+  { skill: 'pm-prioritize', file: 'references/methods.md' },
+  { skill: 'pm-prioritize', file: 'references/roadmap.md' },
+  { skill: 'pm-handoff', file: 'references/story-slicing.md' },
+  { skill: 'pm-handoff', file: 'references/uat.md' },
+  { skill: 'pm-metrics', file: 'references/experiment-design.md' },
+  { skill: 'pm-metrics', file: 'references/metric-tree.md' },
+  { skill: 'pm-metrics', file: 'references/readout.md' },
+  { skill: 'pm-competitive', file: 'references/market-map.md' },
+  { skill: 'pm-competitive', file: 'references/positioning.md' },
+  { skill: 'pm-launch', file: 'references/gtm-enablement.md' },
+  { skill: 'pm-launch', file: 'references/launch-tiers.md' },
+  { skill: 'pm-repo-ops', file: 'references/event-routing.md' },
+  { skill: 'pm-repo-ops', file: 'references/github-api.md' },
+  { skill: 'pm-repo-ops', file: 'references/issue-lifecycle.md' },
+  { skill: 'pm-repo-ops', file: 'references/label-taxonomy.md' },
+  { skill: 'pm-stakeholder', file: 'references/conflict-escalation.md' },
+  { skill: 'pm-stakeholder', file: 'references/weekly-update.md' },
+  { skill: 'pm-retro', file: 'references/assumption-review.md' },
+  { skill: 'pm-retro', file: 'references/opportunity-backfill.md' },
+  { skill: 'pm-retro', file: 'references/retro-format.md' },
+]
+
 export const EXPECTED_FILES = [...EXPECTED_ASSETS, ...EXPECTED_REFERENCES]
 
 /** 检查项总数：SKILL.md 数 + 随包文件数。 */

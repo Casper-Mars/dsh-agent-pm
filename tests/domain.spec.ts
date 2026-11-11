@@ -23,7 +23,18 @@ const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const SKILLS_ROOT = path.join(REPO_ROOT, 'skills')
 
 /** 期望的 Skill（顺序与 `PM_DOMAIN.skills` 的稳定声明顺序一致）。 */
-const EXPECTED_SKILL_NAMES = ['pm-prd']
+const EXPECTED_SKILL_NAMES = [
+  'pm-discovery',
+  'pm-prd',
+  'pm-prioritize',
+  'pm-handoff',
+  'pm-metrics',
+  'pm-competitive',
+  'pm-launch',
+  'pm-repo-ops',
+  'pm-stakeholder',
+  'pm-retro',
+]
 
 /** 人设行数硬上限（方案 §8）。 */
 const PERSONA_MAX_LINES = 70
