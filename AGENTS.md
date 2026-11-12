@@ -14,7 +14,8 @@ Skill + agent preset」，不是业务应用。
 - **只读 Skill**：Skill 正文不会被运行时改写。
 - **人设唯一来源**：`src/persona.ts` 的 `PM_PERSONA`，由插件注入 **depth 0 根会话**；
   `preset-pm` 不挂 persona。
-- **环境基线**：dsh `0.2.1-rc.2`、Node ≥ `22.19.0`、pnpm ≥ `11.7.0`。
+- **环境基线**：dsh `>=0.2.1-rc.2 <0.3.0`（已验证 `0.2.1-rc.2` 与 `0.2.2-rc.1`）、Node ≥ `22.19.0`、pnpm ≥ `11.7.0`。
+  兼容范围**唯一真源**是 `package.json` 的 `engines.dsh`；放宽/收缩前必须 `pnpm compat <版本>` 实测。
 
 ## 2. 角色边界
 

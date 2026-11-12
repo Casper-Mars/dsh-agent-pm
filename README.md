@@ -16,7 +16,7 @@ Skill 为**原生只读**：正文只来自包内 `skills/`，不写盘、不被
 
 ## 安装
 
-前置：dsh `0.2.1-rc.2`、Node ≥ `22.19.0`、pnpm ≥ `11.7.0`。
+前置：dsh `>=0.2.1-rc.2 <0.3.0`、Node ≥ `22.19.0`、pnpm ≥ `11.7.0`。
 
 ```bash
 # 在仓库根目录：安装依赖并编译（产出 dist-server/）
@@ -153,3 +153,16 @@ node scripts/verify-install.mjs --assets /path/to/skills
 - `0.2.0`：从单技能 `pm-prd` 扩展为 10 个技能，覆盖完整产品生命周期；人设扩为六项职责并加入
   强制路由规则；自检从 11 项扩展到 56 项。
 - `0.1.0`：初始迁移版，仅 `pm-prd`。
+
+## 版本兼容性
+
+**声明位置**：`package.json` → `engines.dsh`（本版本为 `>=0.2.1-rc.2 <0.3.0`）。dsh 在安装插件时读它，
+不满足直接拒绝安装并打印不满足项——升级 dsh 后装不上，先看这个字段。
+
+每次合并 main / 每天 09:00 由 `.github/workflows/dsh-compat.yml` 做三层校验（安装准入 → patch 组合 →
+冷启动探针），不兼容时自动开 issue（label `dsh-compat`），恢复后自动关闭。本地跑同一条路径：
+
+```bash
+pnpm compat                 # 校验 npm latest
+pnpm compat 0.2.2-rc.2      # 校验指定版本
+```
