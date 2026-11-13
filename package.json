@@ -1,6 +1,6 @@
 {
   "name": "dsh-agent-pm",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "description": "市场部经理：需求洞察、定义、排序、交付、发布、度量与复盘",
   "keywords": [

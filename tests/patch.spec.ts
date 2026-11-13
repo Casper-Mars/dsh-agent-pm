@@ -4,8 +4,8 @@
  * 断言分三层：
  *   1. 外层形状：恰好一个 `insert` 条目，且**没有任何**直接挂在外层的覆盖条目；
  *   2. 插入顺序与身份：领域插件 / preset 注册表 / 唯一 preset，id 顺序固定；
- *   3. 工具面：恰好 5 个工具，顺序固定，逐项核验 name、tool-todo 参数与禁用项；
- *   4. 工具面只允许 tool-todo 带 config，其余工具带 config 即失败（防误加覆盖）。
+ *   3. 工具面：恰好 8 项（5 个工具 + tool-schedule + plan-mode 组 + workflow 组），顺序固定；
+ *   4. 工具面只允许 tool-todo 与 cordis:group 带 config，其余工具带 config 即失败（防误加覆盖）。
  *
  * 结构断言一律走真实 YAML 解析（`yaml` 包），不用正则猜结构；只有「全文禁词」
  * 用源码扫描，因为它要覆盖注释等非结构位置。
@@ -31,6 +31,9 @@ const EXPECTED_PLUGINS = [
   { id: 'tool-skill', name: '@deepseek-ai/dsh-tool-skill' },
   { id: 'tool-todo', name: '@deepseek-ai/dsh-tool-todo' },
   { id: 'tool-web', name: '@deepseek-ai/dsh-tool-web' },
+  { id: 'tool-schedule', name: '@deepseek-ai/dsh-tool-schedule' },
+  { id: 'planning', name: 'cordis:group' },
+  { id: 'workflow', name: 'cordis:group' },
 ] as const
 
 interface PatchPlugin {
@@ -139,17 +142,17 @@ describe('cordis.patch.yml preset 配置', () => {
     expect((config.description as string).trim()).not.toBe('')
   })
 
-  it('preset.plugins 恰好 5 项，id / name 顺序与契约一致', () => {
+  it('preset.plugins 恰好 8 项，id / name 顺序与契约一致', () => {
     const plugins = presetPlugins()
-    expect(plugins).toHaveLength(5)
+    expect(plugins).toHaveLength(8)
     expect(plugins.map((item) => item.id)).toEqual(EXPECTED_PLUGINS.map((item) => item.id))
     expect(plugins.map((item) => item.name)).toEqual(EXPECTED_PLUGINS.map((item) => item.name))
   })
 
-  it('数量守卫：preset.plugins 少于 5 项或多于 5 项都失败', () => {
+  it('数量守卫：preset.plugins 少于 8 项或多于 8 项都失败', () => {
     const plugins = presetPlugins()
-    expect(plugins.length, `工具数不足 5（当前 ${plugins.length} 项）`).toBeGreaterThanOrEqual(5)
-    expect(plugins.length, `工具数超过 5（当前 ${plugins.length} 项）`).toBeLessThanOrEqual(5)
+    expect(plugins.length, `工具数不足 8（当前 ${plugins.length} 项）`).toBeGreaterThanOrEqual(8)
+    expect(plugins.length, `工具数超过 8（当前 ${plugins.length} 项）`).toBeLessThanOrEqual(8)
   })
 
   it('tool-todo 固定 allowParallelInProgress: false', () => {
@@ -158,8 +161,9 @@ describe('cordis.patch.yml preset 配置', () => {
     expect(configOf(todo as PatchPlugin).allowParallelInProgress).toBe(false)
   })
 
-  it('除 tool-todo 外的工具不得带 config（防止误加覆盖）', () => {
-    const others = presetPlugins().filter((item) => item.id !== 'tool-todo')
+  it('除 tool-todo 与 cordis:group 外不得带 config（防止误加覆盖）', () => {
+    const groups = new Set(['planning', 'workflow'])
+    const others = presetPlugins().filter((item) => item.id !== 'tool-todo' && !groups.has(String(item.id)))
     expect(others.length).toBeGreaterThan(0)
     for (const item of others) {
       expect(item.config, `"${String(item.id)}" 不应带 config`).toBeUndefined()
@@ -177,7 +181,9 @@ describe('cordis.patch.yml preset 配置', () => {
 describe('cordis.patch.yml 禁词', () => {
   it('全文不出现 rsi-agent / complete / tool-subagent', () => {
     expect(SOURCE).not.toMatch(/rsi-agent/)
-    expect(SOURCE).not.toMatch(/complete/)
+    // 只禁 YAML 字段形式的 complete（preset 覆盖开关）；plan-mode 的官方
+    // section 文案里有「decision-complete」，那是模型提示词，不是配置。
+    expect(SOURCE).not.toMatch(/^\s*complete\s*:/m)
     expect(SOURCE).not.toMatch(/tool-subagent/)
   })
 })
