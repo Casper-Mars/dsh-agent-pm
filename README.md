@@ -36,7 +36,8 @@ dsh plugin --profile <p> add link:$PWD
 dsh --profile <p> --dump-config | grep -E "pm-domain|preset-pm"
 ```
 
-应能看到 `pm-domain`（`inject: ['skills', 'agents']`）、`agent-preset-registry.default: pm`，
+应能看到 `pm-domain`（宿主层，`inject: ['agents']`）、preset `pm` 的首项
+`pm-assets`（`dsh-agent-pm/assets`）、`agent-preset-registry.default: pm`。
 以及唯一的 preset `pm`。
 
 ## 技能
@@ -102,7 +103,8 @@ node scripts/verify-install.mjs --assets /path/to/skills
 ├─ vitest.config.ts
 ├─ src/
 │  ├─ index.ts                   # 包入口：re-export 插件三要素与领域数据
-│  ├─ plugin.ts                  # Cordis 插件：注入 ['skills','agents']；注册 Skill；depth 0 注入 persona
+│  ├─ plugin.ts                  # 宿主层插件：inject ['agents']；depth 0 且 preset=pm 时注入 persona
+│  ├─ assets.ts                  # preset 层插件：注入进 preset 后注册领域 Skill
 │  ├─ domain.ts                  # PM_DOMAIN：id / version / displayName / persona / 10 个 Skill 元数据
 │  ├─ persona.ts                 # PM_PERSONA：PM 的全部行为规则（人设唯一来源，≤ 70 行）
 │  └─ firmware.ts                # SKILL.md 读取 / frontmatter 解析 / SkillRegistration 构造
@@ -128,16 +130,18 @@ node scripts/verify-install.mjs --assets /path/to/skills
 
 ### 运行时装配
 
-1. `cordis.patch.yml` 插入 `pm-domain` 插件、`agent-preset-registry`（default=`pm`）与 preset `pm`；
-2. 插件 `apply()` 从 `ctx.skills` 注册 10 个 Skill（正文读 `skills/<name>/SKILL.md`），注册中途失败
-   原子回滚，卸载按 LIFO 反注册；
-3. 插件监听 `agent/created`，只给 **depth 0** 根 agent 注入 `PM_PERSONA`；子 agent 使用各自
-   preset 的 persona。
+1. `cordis.patch.yml` 插入 `pm-domain`（宿主层）、`agent-preset-registry`（default=`pm`）与 preset `pm`；
+2. preset 首项挂 `dsh-agent-pm/assets`：它在每个 agent 的 scope 里注册领域 Skill（正文读
+   `skills/<name>/SKILL.md`），中途失败原子回滚，卸载按 LIFO 反注册；
+   Skill 因此落在 **preset 层**，单 host 装多个角色包时不会并成一份；
+3. `pm-domain` 监听 `agent/created`，只给 **depth 0 且 preset 为 `pm`** 的根 agent 注入
+   `PM_PERSONA`；其他 preset 的会话不会被压上 PM 人设。
 
 ## 硬约束
 
-- **一个 profile 只装一个角色包**：`dsh-agent-pm` 与 `dsh-agent-cto` 都占用
-  `agent-preset-registry.default` 与同一个 `deployment:persona-prefix` 槽位，双装必然互相覆盖。
+- **`registry.default` 只有一个写者**：合并进同一 profile 时，`agent-preset-registry`
+  只由 cto 包插入并写 default；本包不重复插入注册表。persona 已按 preset id 门控，
+  不再与其它角色包互相覆盖。
 - `src/plugin.ts` / `src/firmware.ts` 与 `dsh-agent-dev`、`dsh-agent-cto` 同源：改注入器或加载器
   必须三仓同改并各自跑测试。
 - 角色包不做子 agent 编排，不挂 `tool-subagent`；跨角色协作走驿传派单。

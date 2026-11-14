@@ -4,10 +4,12 @@
  * 与 `dsh-agent-dev/src/plugin.ts @ bc78f02` 同源：只替换领域常量、插件 id 与
  * 日志 / fiber 标签，注册语义、回滚、LIFO 卸载、depth gate 一律不变。
  *
- * 本包是 `pm` 领域插件，只依赖 dsh 标准服务：
- *   - `skills`：注册 1 个领域 Skill（正文由 `skills/<name>/SKILL.md` 读取）；
- *   - `agents`：监听 agent 生命周期，只给 **depth 0** 根会话注入 PM persona。
+ * 本包是 `pm` 的宿主层插件：
+ *   - `agents`：监听 agent 生命周期，只给 **depth 0** 且 preset 为 `pm` 的根会话
+ *     注入 PM persona。
  *
+ * 领域 Skill 不在本层注册：它随 `preset-pm` 挂载 `dsh-agent-pm/assets`，
+ * 注册进该 preset 的 scope 层，这样单 host 装多个角色包时技能不会并成一份。
  * 领域数据来自 `src/domain.ts`，Skill 正文与 frontmatter 由 `src/firmware.ts`
  * 的加载器读取。不引入 tool-subagent / agentPreset 控制面逻辑。
  */
@@ -24,6 +26,9 @@ import {
 /** 插件唯一标识（必须与 `cordis.patch.yml` 中的 `pm-domain` 一致）。 */
 export const name = 'pm-domain'
 
+/** 本包提供的 preset id；persona 只注入给这个 preset 的根会话。 */
+export const ROLE = 'pm'
+
 /**
  * 依赖的 dsh 标准服务。
  *
@@ -32,7 +37,7 @@ export const name = 'pm-domain'
  * 由每个 agent 的 scope 通过 `agent.ctx.inject(['systemPrompt'], ...)` 获取；
  * 缺失时只 warn 降级，不阻断 Skill 注册。
  */
-export const inject: string[] = ['skills', 'agents']
+export const inject: string[] = ['agents']
 
 /** PM persona 占用的 system prompt 槽位（与 dsh-persona 的根槽位一致）。 */
 const PERSONA_SECTION = 'deployment:persona-prefix'
@@ -74,7 +79,7 @@ export function createDomainLogger(raw: unknown, scope: string): DomainLogger {
  * ------------------------------------------------------------------ */
 
 /** 读取服务实例；缺失或抛错时返回 `undefined`（不阻断装配）。 */
-function readService(ctx: Context, serviceName: string): unknown {
+export function readService(ctx: Context, serviceName: string): unknown {
   const getter = (ctx as unknown as { get?: (name: string) => unknown }).get
   if (typeof getter === 'function') {
     try {
@@ -235,6 +240,7 @@ export function registerDomainFirmwareSkills(
   ctx: Context,
   skills: readonly FirmwareSkill[] | undefined = PM_DOMAIN.skills,
   logger: DomainLogger = createDomainLogger(readService(ctx, 'logger'), 'pm-domain'),
+  options: { readonly verifyWinner?: boolean } = {},
 ): Array<() => void> {
   const registry = readSkillRegistry(ctx)
   if (registry === undefined) {
@@ -263,7 +269,9 @@ export function registerDomainFirmwareSkills(
       unregisters.push(unregister)
       registered.push(registration.name)
       claimed.add(registration.name)
-      verifyRegistrationWinner(registry, registration, logger)
+      // 核验用的是宿主层读取：注册发生在 preset scope 时会永远读不到，
+      // 调用方因此可以关掉它（否则每次会话启动刷一条假告警）。
+      if (options.verifyWinner ?? true) verifyRegistrationWinner(registry, registration, logger)
     }
   } catch (error) {
     const rolledBack: string[] = []
@@ -296,7 +304,11 @@ export function registerDomainFirmwareSkills(
 
 /** `agent.session.header` 的最小结构。 */
 interface AgentSessionLike {
-  readonly header?: { readonly delegationDepth?: number }
+  readonly header?: {
+    readonly delegationDepth?: number
+    /** 会话创建时记录的 preset id（durable）。 */
+    readonly agentPreset?: string
+  }
 }
 
 /** 本模块用到的 agent 结构（不引入 dsh-agent 类型依赖）。 */
@@ -379,6 +391,37 @@ export function delegationDepthOf(agent: AgentLike): number {
   return Math.max(persisted, runtime ?? 0)
 }
 
+/** `agentPresets` 的最小结构：只读当前 agent 挂载的 preset id。 */
+interface AgentPresetsLike {
+  composedPreset(ctx: Context): string | undefined
+}
+
+/**
+ * 读 agent 当前挂载的 preset id。
+ *
+ * 优先 `agentPresets.composedPreset()`（运行时绑定，晚选 preset 也准），
+ * 回退到会话 header 的持久化记录。两者都拿不到时返回 `undefined`——此时按
+ * 「无法判定」处理，保留旧的注入行为，避免在没装 preset 服务的宿主上把人设静默丢掉。
+ */
+function composedPresetOf(agent: AgentLike): string | undefined {
+  const service = peekService(agent.ctx, 'agentPresets')
+  if (service !== null && typeof service === 'object') {
+    const composedPreset = (service as AgentPresetsLike).composedPreset
+    if (typeof composedPreset === 'function') {
+      try {
+        const value = composedPreset.call(service, agent.ctx)
+        if (typeof value === 'string' && value.length > 0) return value
+      } catch {
+        // 落到 header
+      }
+    }
+  }
+
+  const persisted = agent.session?.header?.agentPreset
+  if (typeof persisted === 'string' && persisted.length > 0) return persisted
+  return undefined
+}
+
 interface PersonaEntry {
   readonly agent: AgentLike
   readonly fiber: Fiber
@@ -458,6 +501,11 @@ class PmPersonaInjector {
     }
     if (depth !== 0) return
 
+    // 单 host 装多个角色包时，每个包都会收到同一条 `agent/created`；
+    // 只给属于自己的 preset 注入，否则三个人设会压到同一个会话上。
+    const presetId = composedPresetOf(agent)
+    if (presetId !== undefined && presetId !== ROLE) return
+
     const systemPrompt = peekService(agent.ctx, 'systemPrompt')
     if (!isSystemPromptLike(systemPrompt)) {
       this.warnOnce(
@@ -529,27 +577,11 @@ class PmPersonaInjector {
  * 插件装配
  * ------------------------------------------------------------------ */
 
-/** 插件装配入口。 */
+/** 插件装配入口：只做 persona 生命周期；领域 Skill 由 `pm-assets` 在 preset 层注册。 */
 export function apply(ctx: Context): void {
   const logger = createDomainLogger(readService(ctx, 'logger'), 'pm-domain')
 
-  // 1) 领域 Skill：注册 / 回滚 / LIFO 反注册全部交给 ctx.effect 管理。
-  ctx.effect(() => {
-    const unregisters = registerDomainFirmwareSkills(ctx, PM_DOMAIN.skills, logger)
-
-    return () => {
-      // 反注册顺序与注册顺序相反（LIFO）。
-      for (let index = unregisters.length - 1; index >= 0; index -= 1) {
-        try {
-          unregisters[index]?.()
-        } catch (error) {
-          logger.warn('领域 Skill 反注册失败', error)
-        }
-      }
-    }
-  }, 'pm-domain:register-skills')
-
-  // 2) PM persona：agent 生命周期监听 + 插件卸载统一清理。
+  // 1) PM persona：agent 生命周期监听 + 插件卸载统一清理。
   const personas = new PmPersonaInjector(ctx, logger)
   const events = ctx as unknown as AgentEventContext
 
@@ -564,6 +596,6 @@ export function apply(ctx: Context): void {
     }
   }, 'pm-domain:leader-persona-lifecycle')
 
-  // 3) 补装插件加载前已经存在的根 agent（幂等，created 仍会正常触发）。
+  // 2) 补装插件加载前已经存在的根 agent（幂等，created 仍会正常触发）。
   personas.installExisting()
 }

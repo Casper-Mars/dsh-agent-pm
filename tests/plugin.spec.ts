@@ -40,7 +40,8 @@ vi.mock('node:fs', async (importOriginal) => {
 })
 
 import * as fs from 'node:fs'
-import { apply, registerDomainFirmwareSkills } from '../src/plugin'
+import { apply, ROLE, registerDomainFirmwareSkills } from '../src/plugin'
+import { apply as applyAssets } from '../src/assets'
 import { PM_DOMAIN } from '../src/domain'
 import { PM_PERSONA } from '../src/persona'
 import type { FirmwareSkill } from '../src/firmware'
@@ -214,13 +215,17 @@ function createSystemPrompt() {
 interface FakeAgent {
   id: string
   ctx: FakeContext
-  session?: { header?: { delegationDepth?: number } }
+  session?: { header?: { delegationDepth?: number; agentPreset?: string } }
 }
 
-function makeAgent(id: string, depth: number, withSystemPrompt = true): FakeAgent {
+function makeAgent(id: string, depth: number, withSystemPrompt = true, agentPreset?: string): FakeAgent {
   const services: Record<string, unknown> = {}
   if (withSystemPrompt) services.systemPrompt = createSystemPrompt()
-  return { id, ctx: new FakeContext(services), session: { header: { delegationDepth: depth } } }
+  return {
+    id,
+    ctx: new FakeContext(services),
+    session: { header: { delegationDepth: depth, ...(agentPreset === undefined ? {} : { agentPreset }) } },
+  }
 }
 
 /** 插件的宿主 ctx：skills + agents + logger + 已存在 agent 列表。 */
@@ -259,10 +264,10 @@ beforeEach(() => {
  * 1. Skill 注册契约
  * ------------------------------------------------------------------ */
 
-describe('领域 Skill 注册', () => {
+describe('领域 Skill 注册（pm-assets，preset 层）', () => {
   it('注册次数与声明一致，参数全部合规（runtime / directory / 正文不含 frontmatter）', () => {
     const { context, registry } = createHostContext()
-    apply(context)
+    applyAssets(context)
 
     expect(registry.registered).toEqual(EXPECTED_NAMES)
     expect(registry.definitions.size).toBe(EXPECTED_NAMES.length)
@@ -288,7 +293,7 @@ describe('领域 Skill 注册', () => {
       logger: { warn: (message: string) => warns.push(message) },
     })
 
-    expect(() => apply(context)).not.toThrow()
+    expect(() => applyAssets(context)).not.toThrow()
     expect(warns.some((line) => line.includes('ctx.skills'))).toBe(true)
     expect(warns.some((line) => line.includes('跳过领域 Skill 注册'))).toBe(true)
   })
@@ -320,15 +325,15 @@ describe('领域 Skill 注册', () => {
   it('apply 阶段注册失败 → 向上抛出且不留下半个注册表', () => {
     const { context, registry } = createHostContext([], { failAt: 1 })
 
-    expect(() => apply(context)).toThrowError(/^\[pm\] 注册领域 Skill 失败/)
+    expect(() => applyAssets(context)).toThrowError(/^\[pm\] 注册领域 Skill 失败/)
     expect(registry.definitions.size).toBe(0)
   })
 
   it('连续两次 apply → 第二次全部跳过，不重复注册', () => {
     const { context, registry, warns } = createHostContext()
 
-    apply(context)
-    apply(context)
+    applyAssets(context)
+    applyAssets(context)
 
     expect(registry.registered).toHaveLength(EXPECTED_NAMES.length)
     expect(registry.definitions.size).toBe(EXPECTED_NAMES.length)
@@ -356,6 +361,26 @@ describe('PM persona 注入', () => {
       order: 100,
       text: PM_PERSONA,
     })
+  })
+
+  it('preset 不是本角色 → 不注入（单 host 装多个角色包时互不压人设）', async () => {
+    const { context } = createHostContext()
+    apply(context)
+
+    const agent = makeAgent('cto-root', 0, true, 'cto')
+    await context.emit('agent/created', { agent, source: 'test' })
+
+    expect(agent.ctx.injectCalls).toEqual([])
+  })
+
+  it('preset 是本角色 → 注入', async () => {
+    const { context } = createHostContext()
+    apply(context)
+
+    const agent = makeAgent('pm-root', 0, true, ROLE)
+    await context.emit('agent/created', { agent, source: 'test' })
+
+    expect(agent.ctx.injectCalls).toEqual([['systemPrompt']])
   })
 
   it('depth 1 子 agent → 不注入，不调用 inject', async () => {
@@ -413,6 +438,7 @@ describe('PM persona 注入', () => {
   it('systemPrompt 缺失 → 只 warn，Skill 仍全部注册成功', async () => {
     const { context, registry, warns } = createHostContext()
     apply(context)
+    applyAssets(context)
 
     const agent = makeAgent('root', 0, false)
     await expect(context.emit('agent/created', { agent, source: 'test' })).resolves.toBeUndefined()
@@ -452,10 +478,10 @@ describe('PM persona 注入', () => {
 describe('插件卸载', () => {
   it('dispose 技能 effect → 全部 unregister 按 LIFO 调用', async () => {
     const { context, registry } = createHostContext()
-    apply(context)
+    applyAssets(context)
     expect(registry.unregistered).toEqual([])
 
-    const skillsEffect = context.effects.find((item) => item.label === 'pm-domain:register-skills')
+    const skillsEffect = context.effects.find((item) => item.label === 'pm-assets:register-skills')
     expect(skillsEffect).toBeDefined()
     await (skillsEffect as { fiber: FakeFiber }).fiber.dispose()
 
@@ -484,12 +510,12 @@ describe('插件卸载', () => {
 
   it('卸载后再装配 → Skill 可重新注册（占位已释放）', async () => {
     const { context, registry } = createHostContext()
-    apply(context)
-    const skillsEffect = context.effects.find((item) => item.label === 'pm-domain:register-skills')
+    applyAssets(context)
+    const skillsEffect = context.effects.find((item) => item.label === 'pm-assets:register-skills')
     await (skillsEffect as { fiber: FakeFiber }).fiber.dispose()
     expect(registry.definitions.size).toBe(0)
 
-    apply(context)
+    applyAssets(context)
     expect(registry.registered).toHaveLength(EXPECTED_NAMES.length * 2)
     expect(registry.definitions.size).toBe(EXPECTED_NAMES.length)
   })

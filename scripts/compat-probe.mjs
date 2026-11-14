@@ -5,6 +5,11 @@
  * Skill 注册、preset roster、模块解析都是挂载期才发生的。本探针补上这一段，
  * 是 `scripts/dsh-compat.sh` 的第二道闸门。
  *
+ * 注意 Skill 的可见性不在宿主层断言：领域 Skill 由 `dsh-agent-pm/assets` 挂在
+ * preset 层，宿主 ctx 的 `skills.list()` 看不到它们（这是有意设计）。本探针只验证
+ * ① skills 服务契约未变、② preset roster 含本角色、③ preset 声明了资产插件；
+ * 真正的逐 preset 可见性由部署侧的验收脚本负责。
+ *
  * 用法（由 dsh-compat.sh 调用，必须从 dsh 安装目录运行，裸导入才能解析）：
  *
  *   DSH_HOME=<临时目录> PROBE_PROFILE=compat node compat-probe.mjs
@@ -76,21 +81,13 @@ async function main() {
 
   try {
     const skills = ctx.get('skills')
-    if (skills === undefined || typeof skills.list !== 'function') {
-      fail('ctx.skills 缺失或不支持 list()：dsh-skill 服务契约可能已变更')
+    if (skills === undefined || typeof skills.list !== 'function' || typeof skills.get !== 'function') {
+      fail('ctx.skills 缺失或缺少 list()/get()：dsh-skill 服务契约可能已变更')
     } else {
+      // 领域 Skill 在 preset 层，宿主层读不到；这里只确认服务契约可用。
       const list = await skills.list()
-      const names = new Set(list.map((item) => item.name))
-      const missing = EXPECTED_SKILLS.filter((name) => !names.has(name))
-      if (missing.length === 0) pass(`${EXPECTED_SKILLS.length} 个领域 Skill 全部可见`)
-      else fail(`缺少领域 Skill：${missing.join('、')}`)
-
-      const definition = await skills.get('pm-prd')
-      if (definition !== undefined && typeof definition.content === 'string' && definition.content.length > 0) {
-        pass('skills.get("pm-prd") 返回正文')
-      } else {
-        fail('skills.get("dev-quality-gate") 未返回正文')
-      }
+      if (Array.isArray(list)) pass('skills.list() 契约可用（领域 Skill 在 preset 层注册）')
+      else fail('skills.list() 未返回数组')
     }
 
     const presets = ctx.get('agentPresets')
@@ -106,6 +103,15 @@ async function main() {
       const defaultId = presets.defaultId
       if (defaultId === EXPECTED_DEFAULT_PRESET) pass(`主会话默认 preset = ${defaultId}`)
       else fail(`主会话默认 preset 是 "${String(defaultId)}"，期望 "${EXPECTED_DEFAULT_PRESET}"`)
+
+      // roster 若带插件列表，就验证资产插件确实挂在 preset 里；不带则跳过（不假装断言）。
+      const own = roster.find((item) => (item.id ?? item.config?.id) === EXPECTED_DEFAULT_PRESET)
+      const declared = own?.plugins ?? own?.config?.plugins
+      if (Array.isArray(declared)) {
+        const hasAssets = declared.some((entry) => String(entry?.name ?? '').includes('dsh-agent-pm/assets'))
+        if (hasAssets) pass('preset 声明了角色资产插件 dsh-agent-pm/assets')
+        else fail('preset 未声明 dsh-agent-pm/assets：领域 Skill 不会进 preset 层')
+      }
     }
   } catch (error) {
     const detail = error instanceof Error ? (error.stack ?? error.message) : String(error)
