@@ -3,7 +3,7 @@
 # 结构：一次 insert 完成三层装配 —— 本包领域插件（pm-domain）、preset 注册表默认值、
 # 以及唯一的 agent preset（preset-pm）。id / name / inject 必须与 src/plugin.ts 逐项一致。
 #
-# 结构由 tests/patch.spec.ts 断言：恰好一个 insert、三条装配、5 个工具；
+# 结构由 tests/patch.spec.ts 断言：恰好一个 insert、三条装配、7 个工具；
 # 只有 tool-todo 带 config，其余工具带 config 会被测试拒绝。
 # 硬约束：一个 profile 只装一个角色包（两个角色包都占用 registry.default 与人设槽位）。
 
@@ -30,6 +30,8 @@
             name: '@deepseek-ai/dsh-tool-fs'
           - id: tool-bash
             name: '@deepseek-ai/dsh-tool-bash'
+          - id: tool-jobs
+            name: '@deepseek-ai/dsh-tool-jobs'
           - id: tool-skill
             name: '@deepseek-ai/dsh-tool-skill'
           - id: tool-todo

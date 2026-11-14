@@ -4,7 +4,7 @@
  * 断言分三层：
  *   1. 外层形状：恰好一个 `insert` 条目，且**没有任何**直接挂在外层的覆盖条目；
  *   2. 插入顺序与身份：领域插件 / preset 注册表 / 唯一 preset，id 顺序固定；
- *   3. 工具面：恰好 8 项（5 个工具 + tool-schedule + plan-mode 组 + workflow 组），顺序固定；
+ *   3. 工具面：恰好 9 项（7 个工具 + plan-mode 组 + workflow 组），顺序固定；
  *   4. 工具面只允许 tool-todo 与 cordis:group 带 config，其余工具带 config 即失败（防误加覆盖）。
  *
  * 结构断言一律走真实 YAML 解析（`yaml` 包），不用正则猜结构；只有「全文禁词」
@@ -28,6 +28,7 @@ const PRESET_PACKAGE = '@deepseek-ai/dsh-agent-preset'
 const EXPECTED_PLUGINS = [
   { id: 'tool-fs', name: '@deepseek-ai/dsh-tool-fs' },
   { id: 'tool-bash', name: '@deepseek-ai/dsh-tool-bash' },
+  { id: 'tool-jobs', name: '@deepseek-ai/dsh-tool-jobs' },
   { id: 'tool-skill', name: '@deepseek-ai/dsh-tool-skill' },
   { id: 'tool-todo', name: '@deepseek-ai/dsh-tool-todo' },
   { id: 'tool-web', name: '@deepseek-ai/dsh-tool-web' },
@@ -142,17 +143,17 @@ describe('cordis.patch.yml preset 配置', () => {
     expect((config.description as string).trim()).not.toBe('')
   })
 
-  it('preset.plugins 恰好 8 项，id / name 顺序与契约一致', () => {
+  it('preset.plugins 恰好 9 项，id / name 顺序与契约一致', () => {
     const plugins = presetPlugins()
-    expect(plugins).toHaveLength(8)
+    expect(plugins).toHaveLength(9)
     expect(plugins.map((item) => item.id)).toEqual(EXPECTED_PLUGINS.map((item) => item.id))
     expect(plugins.map((item) => item.name)).toEqual(EXPECTED_PLUGINS.map((item) => item.name))
   })
 
-  it('数量守卫：preset.plugins 少于 8 项或多于 8 项都失败', () => {
+  it('数量守卫：preset.plugins 少于 9 项或多于 9 项都失败', () => {
     const plugins = presetPlugins()
-    expect(plugins.length, `工具数不足 8（当前 ${plugins.length} 项）`).toBeGreaterThanOrEqual(8)
-    expect(plugins.length, `工具数超过 8（当前 ${plugins.length} 项）`).toBeLessThanOrEqual(8)
+    expect(plugins.length, `工具数不足 9（当前 ${plugins.length} 项）`).toBeGreaterThanOrEqual(9)
+    expect(plugins.length, `工具数超过 9（当前 ${plugins.length} 项）`).toBeLessThanOrEqual(9)
   })
 
   it('tool-todo 固定 allowParallelInProgress: false', () => {
