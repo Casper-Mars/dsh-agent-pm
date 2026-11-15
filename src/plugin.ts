@@ -13,10 +13,9 @@
  * 领域数据来自 `src/domain.ts`，Skill 正文与 frontmatter 由 `src/firmware.ts`
  * 的加载器读取。不引入 tool-subagent / agentPreset 控制面逻辑。
  */
-import type { Context, Fiber } from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import type { SkillRegistration } from '@deepseek-ai/dsh-skill'
 import { PM_DOMAIN } from './domain.js'
-import { PM_PERSONA } from './persona.js'
 import {
   planFirmwareSkillRegistrations,
   type FirmwareSkill,
@@ -26,21 +25,16 @@ import {
 /** 插件唯一标识（必须与 `cordis.patch.yml` 中的 `pm-domain` 一致）。 */
 export const name = 'pm-domain'
 
-/** 本包提供的 preset id；persona 只注入给这个 preset 的根会话。 */
+/** 本包提供的 preset id（与 preset 定义、kit 的 presetByKind 保持同名）。 */
 export const ROLE = 'pm'
 
 /**
- * 依赖的 dsh 标准服务。
+ * 宿主层不再依赖任何 dsh 服务。
  *
- * `skills` 负责领域 Skill 注册；`agents` 提供 agent 注册表与生命周期事件。
- * persona 所需的 `systemPrompt` 不在此声明：它是 **per-agent** 服务，
- * 由每个 agent 的 scope 通过 `agent.ctx.inject(['systemPrompt'], ...)` 获取；
- * 缺失时只 warn 降级，不阻断 Skill 注册。
+ * persona 已下沉到 preset 层的 `pm-assets`（人设必须跟随 preset 组合启停），
+ * 本插件只在被误挂到宿主层时 warn，不再注册 / 注入任何东西。
  */
-export const inject: string[] = ['agents']
-
-/** PM persona 占用的 system prompt 槽位（与 dsh-persona 的根槽位一致）。 */
-const PERSONA_SECTION = 'deployment:persona-prefix'
+export const inject: string[] = []
 
 /* ------------------------------------------------------------------ *
  * 日志（本地最小包装，基于 `ctx.logger`）
@@ -299,303 +293,23 @@ export function registerDomainFirmwareSkills(
 }
 
 /* ------------------------------------------------------------------ *
- * PM persona 生命周期（per-agent，depth 0 only）
- * ------------------------------------------------------------------ */
-
-/** `agent.session.header` 的最小结构。 */
-interface AgentSessionLike {
-  readonly header?: {
-    readonly delegationDepth?: number
-    /** 会话创建时记录的 preset id（durable）。 */
-    readonly agentPreset?: string
-  }
-}
-
-/** 本模块用到的 agent 结构（不引入 dsh-agent 类型依赖）。 */
-interface AgentLike {
-  readonly id: string
-  readonly ctx: Context
-  readonly session?: AgentSessionLike
-  readonly options?: { readonly subagentDepth?: number }
-}
-
-/** `agent/created` / `agent/disposed` 的 payload。 */
-interface AgentEventContext {
-  on(
-    event: 'agent/created',
-    listener: (payload: {
-      agent: AgentLike
-      source: string
-      signal?: AbortSignal
-    }) => void | Promise<void>,
-  ): () => void
-  on(event: 'agent/disposed', listener: (payload: { agent: AgentLike }) => void): () => void
-}
-
-/** `systemPrompt.section()` 的最小入参。 */
-interface PromptSectionLike {
-  readonly name: string
-  readonly order: number
-  readonly text: string
-  readonly complete?: boolean
-}
-
-/** `ctx.systemPrompt` 的最小结构。 */
-interface SystemPromptLike {
-  section(section: PromptSectionLike): () => void
-  getSectionOrder(name: string): number
-}
-
-/** `ctx.agents` 的最小结构。 */
-interface AgentRegistryLike {
-  list(): readonly AgentLike[]
-}
-
-function isSystemPromptLike(value: unknown): value is SystemPromptLike {
-  return (
-    value !== null &&
-    typeof value === 'object' &&
-    typeof (value as SystemPromptLike).section === 'function' &&
-    typeof (value as SystemPromptLike).getSectionOrder === 'function'
-  )
-}
-
-function readAgentRegistry(ctx: Context): AgentRegistryLike | undefined {
-  const service = peekService(ctx, 'agents')
-  if (
-    service !== null &&
-    typeof service === 'object' &&
-    typeof (service as AgentRegistryLike).list === 'function'
-  ) {
-    return service as AgentRegistryLike
-  }
-  return undefined
-}
-
-/**
- * 读取 agent 的委托深度。
- *
- * 与 `dsh-subagent` 的 `delegationDepthOf` 同口径：
- * `max(session.header.delegationDepth ?? 0, options.subagentDepth ?? 0)`。
- * persisted header 是权威且单调的，runtime options 只能加深、不能降低。
- */
-export function delegationDepthOf(agent: AgentLike): number {
-  const persisted = agent.session?.header?.delegationDepth ?? 0
-  const runtime = agent.options?.subagentDepth
-  if (
-    runtime !== undefined &&
-    (!Number.isSafeInteger(runtime) || runtime < 0 || Object.is(runtime, -0))
-  ) {
-    throw new TypeError('agent subagentDepth must be a non-negative safe integer')
-  }
-  return Math.max(persisted, runtime ?? 0)
-}
-
-/** `agentPresets` 的最小结构：只读当前 agent 挂载的 preset id。 */
-interface AgentPresetsLike {
-  composedPreset(ctx: Context): string | undefined
-}
-
-/**
- * 读 agent 当前挂载的 preset id。
- *
- * 优先 `agentPresets.composedPreset()`（运行时绑定，晚选 preset 也准），
- * 回退到会话 header 的持久化记录。两者都拿不到时返回 `undefined`——此时按
- * 「无法判定」处理，保留旧的注入行为，避免在没装 preset 服务的宿主上把人设静默丢掉。
- */
-function composedPresetOf(agent: AgentLike): string | undefined {
-  const service = peekService(agent.ctx, 'agentPresets')
-  if (service !== null && typeof service === 'object') {
-    const composedPreset = (service as AgentPresetsLike).composedPreset
-    if (typeof composedPreset === 'function') {
-      try {
-        const value = composedPreset.call(service, agent.ctx)
-        if (typeof value === 'string' && value.length > 0) return value
-      } catch {
-        // 落到 header
-      }
-    }
-  }
-
-  const persisted = agent.session?.header?.agentPreset
-  if (typeof persisted === 'string' && persisted.length > 0) return persisted
-  return undefined
-}
-
-interface PersonaEntry {
-  readonly agent: AgentLike
-  readonly fiber: Fiber
-}
-
-/**
- * 根会话 PM persona 注入器。
- *
- * - `agent/created`：显式 depth gate，仅 depth 0；同一 agent 幂等；
- * - `agent/disposed`：dispose 自己记录的 fiber 并从 Map 删除；
- * - `installExisting()`：补装插件加载前已经存在的 agent；
- * - `disposeAll()`：插件卸载时清理所有残留 fiber。
- */
-class PmPersonaInjector {
-  private readonly entries = new Map<string, PersonaEntry>()
-  private readonly injected = new WeakSet<object>()
-  private readonly warned = new Set<string>()
-
-  constructor(
-    private readonly ctx: Context,
-    private readonly logger: DomainLogger,
-  ) {}
-
-  /** 补装 `ctx.agents.list()` 中已存在的根 agent（热重载 / 晚加载场景）。 */
-  installExisting(): void {
-    const registry = readAgentRegistry(this.ctx)
-    if (registry === undefined) {
-      this.warnOnce('agents-missing', 'ctx.agents 不可用，跳过已存在 agent 的 PM persona 补装')
-      return
-    }
-    let agents: readonly AgentLike[]
-    try {
-      agents = registry.list()
-    } catch (error) {
-      this.logger.warn('读取 ctx.agents.list() 失败，跳过 PM persona 补装', error)
-      return
-    }
-    for (const agent of agents) {
-      void this.install(agent)
-    }
-  }
-
-  /** `agent/created` 处理：depth gate + 幂等 + 注入。 */
-  async onCreated(payload: { agent: AgentLike }): Promise<void> {
-    await this.install(payload.agent)
-  }
-
-  /** `agent/disposed` 处理：只清理同一个 agent 实例对应的 fiber。 */
-  onDisposed(agent: AgentLike): void {
-    const entry = this.entries.get(agent.id)
-    if (entry === undefined) return
-    if (entry.agent !== agent) {
-      this.logger.warn(
-        `agent/disposed 的实例与记录不一致（id=${agent.id}），保留当前 fiber 交给它自己的 disposed 清理`,
-      )
-      return
-    }
-    void this.disposeEntry(entry, 'agent disposed')
-  }
-
-  /** 插件卸载：清理所有仍记录的 fiber（等待全部释放完成）。 */
-  async disposeAll(): Promise<void> {
-    await Promise.all([...this.entries.values()].map((entry) => this.disposeEntry(entry, 'plugin unload')))
-  }
-
-  private async install(agent: AgentLike): Promise<void> {
-    if (agent === null || typeof agent !== 'object') return
-    if (this.injected.has(agent)) return
-    this.injected.add(agent)
-
-    let depth: number
-    try {
-      depth = delegationDepthOf(agent)
-    } catch (error) {
-      this.logger.warn(`无法读取 agent ${String(agent.id)} 的 delegationDepth，跳过 persona 注入`, error)
-      return
-    }
-    if (depth !== 0) return
-
-    // 单 host 装多个角色包时，每个包都会收到同一条 `agent/created`；
-    // 只给属于自己的 preset 注入，否则三个人设会压到同一个会话上。
-    const presetId = composedPresetOf(agent)
-    if (presetId !== undefined && presetId !== ROLE) return
-
-    const systemPrompt = peekService(agent.ctx, 'systemPrompt')
-    if (!isSystemPromptLike(systemPrompt)) {
-      this.warnOnce(
-        'systemPrompt-missing',
-        'agent scope 缺少 systemPrompt 服务，PM persona 降级为不注入（Skill 注册不受影响）',
-      )
-      // 不记住这次失败：systemPrompt 之后可用时（例如 resume）仍要能补装。
-      this.injected.delete(agent)
-      return
-    }
-
-    const existing = this.entries.get(agent.id)
-    if (existing !== undefined) {
-      if (existing.agent === agent) return
-      // 同一 id 的新 agent（resume / clear）：先释放旧实例的 fiber。
-      void this.disposeEntry(existing, 'same id replaced by a new agent instance')
-    }
-
-    let fiber: Fiber
-    try {
-      fiber = agent.ctx.inject(['systemPrompt'], (scoped: Context) => {
-        scoped.effect(() => {
-          const prompt = (scoped as unknown as { systemPrompt: SystemPromptLike }).systemPrompt
-          const disposeSection = prompt.section({
-            name: PERSONA_SECTION,
-            order: prompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
-            text: PM_PERSONA,
-          })
-          return disposeSection
-        }, 'pm-domain:leader-persona')
-      }) as Fiber
-    } catch (error) {
-      this.logger.warn(`为 agent ${String(agent.id)} 注入 PM persona 失败`, error)
-      this.injected.delete(agent)
-      return
-    }
-
-    const entry: PersonaEntry = { agent, fiber }
-    this.entries.set(agent.id, entry)
-
-    try {
-      await fiber
-    } catch (error) {
-      this.logger.warn(`PM persona fiber 加载失败（agent=${String(agent.id)}）`, error)
-      this.injected.delete(agent)
-      if (this.entries.get(agent.id) === entry) this.entries.delete(agent.id)
-    }
-  }
-
-  private async disposeEntry(entry: PersonaEntry, reason: string): Promise<void> {
-    if (this.entries.get(entry.agent.id) === entry) {
-      this.entries.delete(entry.agent.id)
-    }
-    try {
-      await entry.fiber.dispose()
-    } catch (error) {
-      this.logger.warn(`释放 PM persona fiber 失败（${reason}）`, error)
-    }
-  }
-
-  private warnOnce(key: string, message: string): void {
-    if (this.warned.has(key)) return
-    this.warned.add(key)
-    this.logger.warn(message)
-  }
-}
-
-/* ------------------------------------------------------------------ *
  * 插件装配
  * ------------------------------------------------------------------ */
 
-/** 插件装配入口：只做 persona 生命周期；领域 Skill 由 `pm-assets` 在 preset 层注册。 */
+/**
+ * 兼容入口：宿主层已不承担装配职责。
+ *
+ * 早期版本在宿主层监听 `agent/created` 注入 persona；那样「先以默认 preset
+ * 创建会话、再在首轮前切换 preset」会永远停在旧人设上（切换不重跑注入）。
+ * 现在 PM persona 由 preset 层的 `pm-assets` 注册：preset 组合切换时旧人设
+ * 随 scope 销毁、新人设随新 scope 挂载，创建与切换两条路径都正确。
+ *
+ * 本导出保留只为不破坏 `exports["."]`；新 `cordis.patch.yml` 不再把它挂到宿主层。
+ */
 export function apply(ctx: Context): void {
   const logger = createDomainLogger(readService(ctx, 'logger'), 'pm-domain')
-
-  // 1) PM persona：agent 生命周期监听 + 插件卸载统一清理。
-  const personas = new PmPersonaInjector(ctx, logger)
-  const events = ctx as unknown as AgentEventContext
-
-  ctx.effect(() => {
-    const offCreated = events.on('agent/created', (payload) => personas.onCreated(payload))
-    const offDisposed = events.on('agent/disposed', ({ agent }) => personas.onDisposed(agent))
-
-    return async () => {
-      offCreated()
-      offDisposed()
-      await personas.disposeAll()
-    }
-  }, 'pm-domain:leader-persona-lifecycle')
-
-  // 2) 补装插件加载前已经存在的根 agent（幂等，created 仍会正常触发）。
-  personas.installExisting()
+  logger.warn(
+    'pm-domain 挂在宿主层已无作用：PM persona 已移到 preset 层的 pm-assets，'
+      + '请从 cordis.patch.yml 删除这条 insert',
+  )
 }

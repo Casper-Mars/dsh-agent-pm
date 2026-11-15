@@ -14,11 +14,8 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
-import { inject as pluginInject, name as pluginName } from '../src/plugin'
 
 const ROLE = 'pm'
-const DOMAIN_ID = 'pm-domain'
-const PACKAGE_NAME = 'dsh-agent-pm'
 const REGISTRY_ID = 'agent-preset-registry'
 const PRESET_ID = 'preset-pm'
 const REGISTRY_PACKAGE = '@deepseek-ai/dsh-agent-preset-registry'
@@ -93,28 +90,13 @@ describe('cordis.patch.yml 外层形状', () => {
     expect(PATCH.filter((entry) => entry.id !== undefined)).toEqual([])
   })
 
-  it('insert 恰好三条，id 顺序固定（领域 / 注册表 / preset）', () => {
-    expect(INSERTED).toHaveLength(3)
-    expect(INSERTED.map((item) => item.id)).toEqual([DOMAIN_ID, REGISTRY_ID, PRESET_ID])
+  it('insert 恰好两条，id 顺序固定（注册表 / preset）', () => {
+    expect(INSERTED).toHaveLength(2)
+    expect(INSERTED.map((item) => item.id)).toEqual([REGISTRY_ID, PRESET_ID])
   })
 })
 
 describe('cordis.patch.yml 插件身份', () => {
-  it(`${DOMAIN_ID} 条目的 id / name / inject 与 src/plugin.ts 逐项一致，且无 config`, () => {
-    const entry = byId(DOMAIN_ID)
-
-    // 单一真源：plugin 导出即契约，patch 必须逐项照抄。
-    expect(pluginName).toBe(DOMAIN_ID)
-    expect(pluginInject).toEqual(['agents'])
-
-    // patch 的 `id` 是插件实例 id，对应 plugin 导出的 name；
-    // `name` 是 npm 包名，用于解析模块，两者不是同一个字段。
-    expect(entry.id).toBe(pluginName)
-    expect(entry.name).toBe(PACKAGE_NAME)
-    expect(entry.inject).toEqual(pluginInject)
-    expect(entry.config).toBeUndefined()
-  })
-
   it('恰好一个 agent-preset-registry，且 name 正确', () => {
     const registries = INSERTED.filter((item) => item.id === REGISTRY_ID)
     expect(registries).toHaveLength(1)

@@ -40,7 +40,7 @@ vi.mock('node:fs', async (importOriginal) => {
 })
 
 import * as fs from 'node:fs'
-import { apply, ROLE, registerDomainFirmwareSkills } from '../src/plugin'
+import { registerDomainFirmwareSkills } from '../src/plugin'
 import { apply as applyAssets } from '../src/assets'
 import { PM_DOMAIN } from '../src/domain'
 import { PM_PERSONA } from '../src/persona'
@@ -212,32 +212,13 @@ function createSystemPrompt() {
   }
 }
 
-interface FakeAgent {
-  id: string
-  ctx: FakeContext
-  session?: { header?: { delegationDepth?: number; agentPreset?: string } }
-}
-
-function makeAgent(id: string, depth: number, withSystemPrompt = true, agentPreset?: string): FakeAgent {
-  const services: Record<string, unknown> = {}
-  if (withSystemPrompt) services.systemPrompt = createSystemPrompt()
-  return {
-    id,
-    ctx: new FakeContext(services),
-    session: { header: { delegationDepth: depth, ...(agentPreset === undefined ? {} : { agentPreset }) } },
-  }
-}
-
-/** 插件的宿主 ctx：skills + agents + logger + 已存在 agent 列表。 */
-function createHostContext(
-  existingAgents: FakeAgent[] = [],
-  registryOptions: { failAt?: number } = {},
-) {
+/** 装配 ctx：skills + systemPrompt + logger。 */
+function createHostContext(registryOptions: { failAt?: number } = {}) {
   const registry = createSkillRegistry(registryOptions)
   const warns: string[] = []
   const context = new FakeContext({
     skills: registry,
-    agents: { list: () => existingAgents },
+    systemPrompt: createSystemPrompt(),
     logger: { warn: (message: string) => warns.push(message) },
   })
   return { context, registry, warns }
@@ -323,7 +304,7 @@ describe('领域 Skill 注册（pm-assets，preset 层）', () => {
   })
 
   it('apply 阶段注册失败 → 向上抛出且不留下半个注册表', () => {
-    const { context, registry } = createHostContext([], { failAt: 1 })
+    const { context, registry } = createHostContext({ failAt: 1 })
 
     expect(() => applyAssets(context)).toThrowError(/^\[pm\] 注册领域 Skill 失败/)
     expect(registry.definitions.size).toBe(0)
@@ -342,132 +323,53 @@ describe('领域 Skill 注册（pm-assets，preset 层）', () => {
 })
 
 /* ------------------------------------------------------------------ *
- * 2. persona 生命周期
+ * 2. persona（preset 层）
  * ------------------------------------------------------------------ */
 
-describe('PM persona 注入', () => {
-  it('depth 0 根 agent → 注入 persona（槽位与正文正确）', async () => {
-    const { context } = createHostContext()
-    apply(context)
+describe('PM persona（pm-assets，preset 层）', () => {
+  it('注册 deployment:persona-prefix 槽位，正文与 PM_PERSONA 一致', () => {
+    const prompt = createSystemPrompt()
+    const context = new FakeContext({
+      skills: createSkillRegistry(),
+      systemPrompt: prompt,
+      logger: { warn: () => {} },
+    })
+    applyAssets(context)
 
-    const agent = makeAgent('root', 0)
-    await context.emit('agent/created', { agent, source: 'test' })
-
-    expect(agent.ctx.injectCalls).toEqual([['systemPrompt']])
-    const sections = (agent.ctx.get('systemPrompt') as ReturnType<typeof createSystemPrompt>).sections
-    expect(sections).toHaveLength(1)
-    expect(sections[0]).toMatchObject({
+    expect(prompt.sections).toHaveLength(1)
+    expect(prompt.sections[0]).toMatchObject({
       name: 'deployment:persona-prefix',
       order: 100,
       text: PM_PERSONA,
     })
   })
 
-  it('preset 不是本角色 → 不注入（单 host 装多个角色包时互不压人设）', async () => {
-    const { context } = createHostContext()
-    apply(context)
-
-    const agent = makeAgent('cto-root', 0, true, 'cto')
-    await context.emit('agent/created', { agent, source: 'test' })
-
-    expect(agent.ctx.injectCalls).toEqual([])
-  })
-
-  it('preset 是本角色 → 注入', async () => {
-    const { context } = createHostContext()
-    apply(context)
-
-    const agent = makeAgent('pm-root', 0, true, ROLE)
-    await context.emit('agent/created', { agent, source: 'test' })
-
-    expect(agent.ctx.injectCalls).toEqual([['systemPrompt']])
-  })
-
-  it('depth 1 子 agent → 不注入，不调用 inject', async () => {
-    const { context } = createHostContext()
-    apply(context)
-
-    const agent = makeAgent('child', 1)
-    await context.emit('agent/created', { agent, source: 'subagent' })
-
-    expect(agent.ctx.injectCalls).toEqual([])
-    expect((agent.ctx.get('systemPrompt') as ReturnType<typeof createSystemPrompt>).sections).toEqual([])
-  })
-
-  it('运行时 subagentDepth 与 persisted depth 取最大值（runtime 只能加深）', async () => {
-    const { context } = createHostContext()
-    apply(context)
-
-    const agent = makeAgent('runtime-child', 0)
-    agent.session = { header: {} }
-    ;(agent as unknown as { options: { subagentDepth: number } }).options = { subagentDepth: 1 }
-    await context.emit('agent/created', { agent, source: 'subagent' })
-
-    expect(agent.ctx.injectCalls).toEqual([])
-  })
-
-  it('同一 agent 重复 agent/created → 幂等，只注入一次', async () => {
-    const { context } = createHostContext()
-    apply(context)
-
-    const agent = makeAgent('root', 0)
-    await context.emit('agent/created', { agent, source: 'test' })
-    await context.emit('agent/created', { agent, source: 'test' })
-    await context.emit('agent/created', { agent, source: 'test' })
-
-    expect(agent.ctx.injectCalls).toHaveLength(1)
-    expect((agent.ctx.get('systemPrompt') as ReturnType<typeof createSystemPrompt>).sections).toHaveLength(1)
-  })
-
-  it('agent/disposed → 记录的 fiber 被 dispose，section 被释放', async () => {
-    const { context } = createHostContext()
-    apply(context)
-
-    const agent = makeAgent('root', 0)
-    await context.emit('agent/created', { agent, source: 'test' })
-    const prompt = agent.ctx.get('systemPrompt') as ReturnType<typeof createSystemPrompt>
-    expect(prompt.sections[0].disposed).toBe(false)
-
-    await context.emit('agent/disposed', { agent })
-    await flush()
-
-    expect(agent.ctx.injectFibers[0].disposed).toBe(true)
-    expect(prompt.sections[0].disposed).toBe(true)
-  })
-
-  it('systemPrompt 缺失 → 只 warn，Skill 仍全部注册成功', async () => {
-    const { context, registry, warns } = createHostContext()
-    apply(context)
+  it('systemPrompt 缺失 → 只 warn，领域 Skill 仍全部注册', () => {
+    const warns: string[] = []
+    const registry = createSkillRegistry()
+    const context = new FakeContext({
+      skills: registry,
+      logger: { warn: (message: string) => warns.push(message) },
+    })
     applyAssets(context)
 
-    const agent = makeAgent('root', 0, false)
-    await expect(context.emit('agent/created', { agent, source: 'test' })).resolves.toBeUndefined()
-
-    expect(agent.ctx.injectCalls).toEqual([])
-    expect(warns.some((line) => line.includes('systemPrompt'))).toBe(true)
-    expect(registry.definitions.size).toBe(EXPECTED_NAMES.length)
+    expect(registry.registered).toHaveLength(EXPECTED_NAMES.length)
+    expect(warns.some((line) => line.includes('persona'))).toBe(true)
   })
 
-  it('systemPrompt 后补可用 → 同一 agent 仍能补装（失败不被记住）', async () => {
-    const { context } = createHostContext()
-    apply(context)
+  it('scope 卸载 → persona section 被释放（切换 preset 时旧人设随之消失）', async () => {
+    const prompt = createSystemPrompt()
+    const context = new FakeContext({
+      skills: createSkillRegistry(),
+      systemPrompt: prompt,
+      logger: { warn: () => {} },
+    })
+    applyAssets(context)
 
-    const agent = makeAgent('root', 0, false)
-    await context.emit('agent/created', { agent, source: 'test' })
-    expect(agent.ctx.injectCalls).toEqual([])
-
-    agent.ctx.setService('systemPrompt', createSystemPrompt())
-    await context.emit('agent/created', { agent, source: 'test' })
-    expect(agent.ctx.injectCalls).toEqual([['systemPrompt']])
-  })
-
-  it('插件加载前已存在的根 agent → installExisting 补装', async () => {
-    const existing = makeAgent('existing', 0)
-    const { context } = createHostContext([existing])
-    apply(context)
-    await flush()
-
-    expect(existing.ctx.injectCalls).toEqual([['systemPrompt']])
+    const effect = context.effects.find((item) => item.label === 'pm-assets:persona')
+    expect(effect).toBeDefined()
+    await (effect as { fiber: FakeFiber }).fiber.dispose()
+    expect(prompt.sections[0]?.disposed).toBe(true)
   })
 })
 
@@ -490,24 +392,6 @@ describe('插件卸载', () => {
     expect(registry.definitions.size).toBe(0)
   })
 
-  it('卸载生命周期 effect → 解绑事件并释放残留 persona fiber', async () => {
-    const { context } = createHostContext()
-    apply(context)
-
-    const agent = makeAgent('root', 0)
-    await context.emit('agent/created', { agent, source: 'test' })
-    expect(context.listenerCount('agent/created')).toBe(1)
-
-    const lifecycle = context.effects.find(
-      (item) => item.label === 'pm-domain:leader-persona-lifecycle',
-    )
-    await (lifecycle as { fiber: FakeFiber }).fiber.dispose()
-
-    expect(context.listenerCount('agent/created')).toBe(0)
-    expect(context.listenerCount('agent/disposed')).toBe(0)
-    expect(agent.ctx.injectFibers[0].disposed).toBe(true)
-  })
-
   it('卸载后再装配 → Skill 可重新注册（占位已释放）', async () => {
     const { context, registry } = createHostContext()
     applyAssets(context)
@@ -526,22 +410,16 @@ describe('插件卸载', () => {
  * ------------------------------------------------------------------ */
 
 describe('注册只读', () => {
-  it('装配 + 注册 + 注入 + 卸载全程 0 次写盘调用', async () => {
-    const { context } = createHostContext()
-    apply(context)
-
-    const root = makeAgent('root', 0)
-    const child = makeAgent('child', 1)
-    await context.emit('agent/created', { agent: root, source: 'test' })
-    await context.emit('agent/created', { agent: child, source: 'subagent' })
-    await context.emit('agent/disposed', { agent: root })
+  it('装配 + 注册 + 卸载全程 0 次写盘调用', async () => {
+    const context = new FakeContext({
+      skills: createSkillRegistry(),
+      systemPrompt: createSystemPrompt(),
+      logger: { warn: () => {} },
+    })
+    applyAssets(context)
     await flush()
 
-    const lifecycle = context.effects.find(
-      (item) => item.label === 'pm-domain:leader-persona-lifecycle',
-    )
-    await (lifecycle as { fiber: FakeFiber }).fiber.dispose()
-    await context.effects[0].fiber.dispose()
+    for (const item of [...context.effects].reverse()) await item.fiber.dispose()
 
     const writeApis = [
       'writeFileSync',

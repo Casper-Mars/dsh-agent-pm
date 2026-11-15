@@ -1,20 +1,16 @@
 # dsh-agent-pm bundle patch —— 单一角色：市场部经理（产品经理）
 #
-# 结构：一次 insert 完成三层装配 —— 本包宿主层插件（pm-domain）、preset 注册表默认值、
-# 以及唯一的 agent preset（preset-pm）。id / name / inject 必须与 src/plugin.ts 逐项一致。
+# 结构：一次 insert 完成两层装配 —— preset 注册表默认值与唯一的 agent preset（preset-pm）。
+# persona 与领域 Skill 都由 preset 的 `pm-assets` 在 agent scope 注册（不再有宿主层插件）。
 #
 # 角色资产（领域 Skill）不在宿主层：preset 的 plugins 首项挂 `dsh-agent-pm/assets`，
 # 注册进该 preset 的 scope 层，单 host 装多个角色包时技能不会并成一份。
 #
-# 结构由 tests/patch.spec.ts 断言：恰好一个 insert、三条装配、9 项工具面；
+# 结构由 tests/patch.spec.ts 断言：恰好一个 insert、两条装配、9 项工具面；
 # 只有 tool-todo 带 config，其余工具带 config 会被测试拒绝。
 # 硬约束：合并进同一 profile 时，`agent-preset-registry` 只由 cto 包插入（本包不重复插）。
 
 - insert:
-    - id: pm-domain
-      name: dsh-agent-pm
-      inject: ['agents']
-
     - id: agent-preset-registry
       name: '@deepseek-ai/dsh-agent-preset-registry'
       config:
