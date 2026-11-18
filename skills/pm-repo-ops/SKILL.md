@@ -63,6 +63,15 @@ whenToUse: 收到仓库巡检摘要或 webhook 事件、处理新 issue / 评论
 8. **汇总**：本轮结论数量、需要人类拍板的前 3 条、链接。
 9. **交接**：需要技术判断交 CTO；需求按 weight 产出（`xs` 直接写需求卡，`s`/`m`/`l` 走 `pm-prd` 对应模板）；进入交付走 `pm-handoff`。
 
+## 代码证据前置
+
+要引用代码、复现行为或核对实现时，先同步仓库再下结论：
+
+1. 仓库地址取 issue / 派单里的 `git_url`；本地没有就 `gh repo clone <url> -- --depth=50`。
+2. `git fetch --prune origin`，切默认分支；工作区脏先 `git stash`，不要覆盖。
+3. 记录 `git rev-parse HEAD`，评论 / PRD 里的代码证据写明基于哪个 commit。
+4. 只读核对，不改代码、不提交；需要修复交 CTO / Dev。
+
 ## 门禁
 
 | # | 门禁 | 通过线 | 不过怎么办 |
