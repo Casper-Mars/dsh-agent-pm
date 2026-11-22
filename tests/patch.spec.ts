@@ -4,7 +4,7 @@
  * 断言分三层：
  *   1. 外层形状：恰好一个 `insert` 条目，且**没有任何**直接挂在外层的覆盖条目；
  *   2. 插入顺序与身份：领域插件 / preset 注册表 / 唯一 preset，id 顺序固定；
- *   3. 工具面：恰好 10 项（角色资产 + 7 个工具 + plan-mode 组 + workflow 组），顺序固定；
+ *   3. 工具面：恰好 12 项（角色资产 + echuan/task 子路径 + 7 个工具 + plan-mode 组 + workflow 组），顺序固定；
  *   4. 工具面只允许 tool-todo 与 cordis:group 带 config，其余工具带 config 即失败（防误加覆盖）。
  *
  * 结构断言一律走真实 YAML 解析（`yaml` 包），不用正则猜结构；只有「全文禁词」
@@ -24,6 +24,8 @@ const PRESET_PACKAGE = '@deepseek-ai/dsh-agent-preset'
 /** 工具面契约：顺序、id、npm 包名都固定，不多不少。 */
 const EXPECTED_PLUGINS = [
   { id: 'pm-assets', name: 'dsh-agent-pm/assets' },
+  { id: 'echuan-tools', name: 'dsh-echuan/tools/requester' },
+  { id: 'task-tools', name: 'dsh-agent-base/tools/task-readonly' },
   { id: 'tool-fs', name: '@deepseek-ai/dsh-tool-fs' },
   { id: 'tool-bash', name: '@deepseek-ai/dsh-tool-bash' },
   { id: 'tool-jobs', name: '@deepseek-ai/dsh-tool-jobs' },
@@ -128,15 +130,15 @@ describe('cordis.patch.yml preset 配置', () => {
 
   it('preset.plugins 恰好 10 项，id / name 顺序与契约一致', () => {
     const plugins = presetPlugins()
-    expect(plugins).toHaveLength(10)
+    expect(plugins).toHaveLength(12)
     expect(plugins.map((item) => item.id)).toEqual(EXPECTED_PLUGINS.map((item) => item.id))
     expect(plugins.map((item) => item.name)).toEqual(EXPECTED_PLUGINS.map((item) => item.name))
   })
 
   it('数量守卫：preset.plugins 少于 10 项或多于 10 项都失败', () => {
     const plugins = presetPlugins()
-    expect(plugins.length, `工具数不足 10（当前 ${plugins.length} 项）`).toBeGreaterThanOrEqual(10)
-    expect(plugins.length, `工具数超过 10（当前 ${plugins.length} 项）`).toBeLessThanOrEqual(10)
+    expect(plugins.length, `工具数不足 12（当前 ${plugins.length} 项）`).toBeGreaterThanOrEqual(12)
+    expect(plugins.length, `工具数超过 12（当前 ${plugins.length} 项）`).toBeLessThanOrEqual(12)
   })
 
   it('tool-todo 固定 allowParallelInProgress: false', () => {
@@ -169,5 +171,13 @@ describe('cordis.patch.yml 禁词', () => {
     // section 文案里有「decision-complete」，那是模型提示词，不是配置。
     expect(SOURCE).not.toMatch(/^\s*complete\s*:/m)
     expect(SOURCE).not.toMatch(/tool-subagent/)
+  })
+})
+
+describe('工具面 preset 化', () => {
+  it('pm 挂 echuan requester + core task-readonly', () => {
+    const names = presetPlugins().map((item) => item.name)
+    expect(names).toContain('dsh-echuan/tools/requester')
+    expect(names).toContain('dsh-agent-base/tools/task-readonly')
   })
 })
