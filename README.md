@@ -46,6 +46,7 @@ dsh --profile <p> --dump-config | grep -E "pm-domain|preset-pm"
 |------|----------|----------|
 | `pm-discovery` | 评估想法、设计访谈、挖需求证据、判断信号强弱、画机会树 | 诊断卡片、访谈快照、机会树 |
 | `pm-prd` | 写/改 PRD、写 PR-FAQ、评审需求文档、补或评审 AC | PRD / PR-FAQ |
+| `pm-brief` | 一页给决策人看、文档太长读不下去、评审前要结论与取舍、把既有 PRD 降维 | 决策简报（≤600 字六段） |
 | `pm-prioritize` | 排优先级、砍范围、做路线图、需求池分层 | 排序表、Now-Next-Later |
 | `pm-handoff` | 交接开发、解释边界、处理变更、切故事、UAT | 交接包、变更单、验收记录 |
 | `pm-metrics` | 定指标与口径、设计实验、上线读数 | 指标定义、实验方案、readout |
@@ -65,18 +66,18 @@ Skill 的 `description` 与 `whenToUse` 只描述本技能边界，不点名其�
 
 ```bash
 pnpm typecheck        # tsc --noEmit
-pnpm test             # vitest run：5 个 spec、130 个用例
+pnpm test             # vitest run：7 个 spec、139 个用例
 pnpm build            # 产出 dist-server/（含 cordis.patch.yml 副本）
-pnpm verify:install   # 56/56 PASS：10 个 SKILL.md + 14 个 asset + 32 个 reference
+pnpm verify:install   # 59/59 PASS：11 个 SKILL.md + 15 个 asset + 33 个 reference
 make check            # build → test → verify → pack
 ```
 
 | 命令 | 成功判据 |
 |------|----------|
 | `pnpm typecheck` | 退出码 0，无类型错误 |
-| `pnpm test` | **130 passed**、0 failed、0 skipped，退出码 0 |
+| `pnpm test` | **139 passed**、0 failed、0 skipped，退出码 0 |
 | `pnpm build` | 退出码 0，产出 `dist-server/index.js` 与 `dist-server/cordis.patch.yml` |
-| `pnpm verify:install` | 56 行 `PASS`、退出码 0；任一 `FAIL` 退出码 1；目录 / 参数错误退出码 2 |
+| `pnpm verify:install` | 59 行 `PASS`、退出码 0；任一 `FAIL` 退出码 1；目录 / 参数错误退出码 2 |
 | `make check` | 上述 build / test / verify 全通过，且 `npm pack --dry-run` 清单正常 |
 
 `verify:install` 默认检查**包内** `skills/`，不需要安装到 profile；`--assets <dir>` 仅用于手工
@@ -105,13 +106,14 @@ node scripts/verify-install.mjs --assets /path/to/skills
 │  ├─ index.ts                   # 包入口：re-export 插件三要素与领域数据
 │  ├─ plugin.ts                  # 领域工具函数（日志 / 服务探测 / Skill 注册）；宿主层不再装配
 │  ├─ assets.ts                  # preset 层插件：注入进 preset 后注册领域 Skill
-│  ├─ domain.ts                  # PM_DOMAIN：id / version / displayName / persona / 10 个 Skill 元数据
+│  ├─ domain.ts                  # PM_DOMAIN：id / version / displayName / persona / 11 个 Skill 元数据
 │  ├─ persona.ts                 # PM_PERSONA：PM 的全部行为规则（人设唯一来源，≤ 70 行）
 │  └─ firmware.ts                # SKILL.md 读取 / frontmatter 解析 / SkillRegistration 构造
 ├─ dist-server/                  # 构建产物：pnpm build 生成，git 忽略，不手工编辑
 ├─ skills/
 │  ├─ pm-discovery/              # 1 asset + 7 references
 │  ├─ pm-prd/                    # 2 assets + 5 references
+│  ├─ pm-brief/                  # 1 asset + 1 reference
 │  ├─ pm-prioritize/             # 1 asset + 2 references
 │  ├─ pm-handoff/                # 2 assets + 2 references
 │  ├─ pm-metrics/                # 2 assets + 3 references
@@ -122,7 +124,7 @@ node scripts/verify-install.mjs --assets /path/to/skills
 │  └─ pm-retro/                  # 1 asset + 3 references
 ├─ scripts/
 │  ├─ copy-assets.mjs            # 把 cordis.patch.yml 复制进 dist-server/
-│  └─ verify-install.mjs         # 56 项包内自检（CLI + 导出纯函数）
+│  └─ verify-install.mjs         # 59 项包内自检（CLI + 导出纯函数）
 ├─ tests/                        # 5 个 spec：domain / plugin / patch / firmware-registration / verify-install
 ├─ AGENTS.md
 └─ README.md
@@ -149,6 +151,8 @@ node scripts/verify-install.mjs --assets /path/to/skills
 
 ## 版本
 
+- `0.8.0`：新增 `pm-brief`（决策简报，人类层）。`m` / `l` 产物必须附一页简报（结论 / 取舍 /
+  拍板点 / 风险，≤600 字）；人设与路由同步，自检从 56 项扩展到 59 项。
 - `0.2.2`：修「完备 = 可计数」问题（issue #1）。非目标的合格判据从「≥3 条」改为「能指出挡住哪次
   具体越界」；「未决」从必填章节/必填段改为条件项（无则写「无」）；模板去掉空槽；新增反凑数红线
   与 `tests/rule-integrity.spec.ts` 回归断言。

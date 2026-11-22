@@ -26,6 +26,7 @@ const SKILLS_ROOT = path.join(REPO_ROOT, 'skills')
 const EXPECTED_SKILL_NAMES = [
   'pm-discovery',
   'pm-prd',
+  'pm-brief',
   'pm-prioritize',
   'pm-handoff',
   'pm-metrics',

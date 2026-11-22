@@ -26,6 +26,7 @@ import { pathToFileURL } from 'node:url'
 export const EXPECTED_SKILLS = [
   'pm-discovery',
   'pm-prd',
+  'pm-brief',
   'pm-prioritize',
   'pm-handoff',
   'pm-metrics',

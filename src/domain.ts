@@ -1,7 +1,7 @@
 /**
  * `pm` 领域数据：Skill 元数据与 PM 人设，不依赖任何外部领域包。
  *
- * 单包声明 10 个只读 Skill，覆盖 PM 完整价值链：洞察 → 定义 → 排序 → 交接 →
+ * 单包声明 11 个只读 Skill，覆盖 PM 完整价值链：洞察 → 定义 → 排序 → 交接 →
  * 发布 → 度量 → 复盘，外加市场、仓库运营与组织沟通。{@link PMSkill} 只存元数据
  * （name / description / dir），SKILL.md 正文由加载器从 `dir/SKILL.md` 读取，
  * 正文不内联进 `src/`。
@@ -46,10 +46,10 @@ function skill(name: string, description: string): PMSkill {
   return { name, description, dir: skillDir(name) }
 }
 
-/** `pm` 领域：10 个只读 Skill + PM 人设。 */
+/** `pm` 领域：11 个只读 Skill + PM 人设。 */
 export const PM_DOMAIN: PMDomain = {
   id: 'pm',
-  version: '0.3.0',
+  version: '0.4.0',
   displayName: 'PM Domain',
   personaMarkdown: PM_PERSONA,
   skills: [
@@ -60,6 +60,10 @@ export const PM_DOMAIN: PMDomain = {
     skill(
       'pm-prd',
       '为一个需求编写或修订 PRD / PR-FAQ、评审需求文档、补或评审验收条件时使用。只要用户提到 PRD、需求文档、验收条件、目标与非目标，就使用本技能。不用于技术选型与实施方案设计。',
+    ),
+    skill(
+      'pm-brief',
+      '把需求、PRD 或需求讨论压成一页决策简报，供不看细节的人拍板；也用于把一份既有需求文档降维成可读版。不用于编写完整 PRD 与验收条件。',
     ),
     skill(
       'pm-prioritize',

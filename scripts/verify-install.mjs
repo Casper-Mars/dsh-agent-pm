@@ -6,8 +6,8 @@
  * 旧版的「安装目录」硬编码与 `--home` / 环境变量默认推导已随任务-05 删除；
  * `--assets <dir>` 只用于手工核查其它资产目录，不再是默认路径。
  *
- * 检查清单是本文件的唯一真源：`EXPECTED_SKILLS`（10 个）+ `EXPECTED_ASSETS`（14 个）
- * + `EXPECTED_REFERENCES`（32 个）= 56 项，与包内 `skills/pm-prd/` 的实际布局逐项对应。
+ * 检查清单是本文件的唯一真源：`EXPECTED_SKILLS`（11 个）+ `EXPECTED_ASSETS`（15 个）
+ * + `EXPECTED_REFERENCES`（33 个）= 59 项，与包内 `skills/pm-prd/` 的实际布局逐项对应。
  * 新增 / 删除随包文件时必须同步本清单与 `tests/verify-install.spec.ts` 的计数断言。
  *
  * 退出码：全 PASS 为 0，有 FAIL 为 1，参数 / 环境错误（目录不存在、未知参数）为 2。
@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url'
 export const EXPECTED_SKILLS = [
   'pm-discovery',
   'pm-prd',
+  'pm-brief',
   'pm-prioritize',
   'pm-handoff',
   'pm-metrics',
@@ -44,6 +45,7 @@ export const EXPECTED_ASSETS = [
   { skill: 'pm-discovery', file: 'assets/diagnosis-card.md' },
   { skill: 'pm-prd', file: 'assets/prd-template.md' },
   { skill: 'pm-prd', file: 'assets/prfq-template.md' },
+  { skill: 'pm-brief', file: 'assets/brief-template.md' },
   { skill: 'pm-prioritize', file: 'assets/prioritization-table.md' },
   { skill: 'pm-handoff', file: 'assets/handoff-pack.md' },
   { skill: 'pm-handoff', file: 'assets/change-request.md' },
@@ -71,6 +73,7 @@ export const EXPECTED_REFERENCES = [
   { skill: 'pm-prd', file: 'references/doc-checks.md' },
   { skill: 'pm-prd', file: 'references/dor.md' },
   { skill: 'pm-prd', file: 'references/language.md' },
+  { skill: 'pm-brief', file: 'references/brief-vs-prd.md' },
   { skill: 'pm-prioritize', file: 'references/methods.md' },
   { skill: 'pm-prioritize', file: 'references/roadmap.md' },
   { skill: 'pm-handoff', file: 'references/story-slicing.md' },

@@ -1,7 +1,7 @@
 /**
  * `scripts/verify-install.mjs` 单测。
  *
- * 覆盖：检查项计数（10 个 SKILL.md + 14 个 asset + 32 个 reference = 56）、
+ * 覆盖：检查项计数（11 个 SKILL.md + 15 个 asset + 33 个 reference = 59）、
  * 包内默认路径全 PASS、完整夹具全 PASS、缺 SKILL.md / asset / reference →
  * 恰好 1 条 FAIL 且带绝对路径、空文件 → FAIL 带原因、`skillsRoot` 入参校验。
  * 夹具全部落在 `mkdtempSync` 临时目录，不读写真实 profile。
@@ -63,12 +63,12 @@ afterEach(() => {
 })
 
 describe('期望常量', () => {
-  it('10 个 Skill + 14 个 asset + 32 个 reference = 56 项', () => {
-    expect(EXPECTED_SKILLS).toHaveLength(10)
-    expect(EXPECTED_ASSETS).toHaveLength(14)
-    expect(EXPECTED_REFERENCES).toHaveLength(32)
-    expect(EXPECTED_FILES).toHaveLength(46)
-    expect(EXPECTED_CHECK_COUNT).toBe(56)
+  it('11 个 Skill + 15 个 asset + 33 个 reference = 59 项', () => {
+    expect(EXPECTED_SKILLS).toHaveLength(11)
+    expect(EXPECTED_ASSETS).toHaveLength(15)
+    expect(EXPECTED_REFERENCES).toHaveLength(33)
+    expect(EXPECTED_FILES).toHaveLength(48)
+    expect(EXPECTED_CHECK_COUNT).toBe(59)
   })
 
   it('EXPECTED_SKILLS 无重复、EXPECTED_FILES 无重复键', () => {
@@ -87,7 +87,7 @@ describe('期望常量', () => {
 })
 
 describe('verifyInstall', () => {
-  it('默认检查包内 skills/：56 条全 PASS、退出码 0', () => {
+  it('默认检查包内 skills/：59 条全 PASS、退出码 0', () => {
     const targets = resolveSkillsRoot({ repoRoot: REPO_ROOT })
     expect(targets.source).toBe('package')
     expect(targets.skillsRoot).toBe(join(REPO_ROOT, 'skills'))
