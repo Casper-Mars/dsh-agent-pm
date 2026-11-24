@@ -47,6 +47,12 @@
             name: '@deepseek-ai/dsh-tool-web'
           - id: tool-schedule
             name: '@deepseek-ai/dsh-tool-schedule'
+          - id: tool-subagent-fork
+            name: '@deepseek-ai/dsh-tool-subagent'
+            config:
+              provider: fork
+              toolName: subagent_fork
+              maxDepth: 1
           - id: planning
             name: cordis:group
             group: true

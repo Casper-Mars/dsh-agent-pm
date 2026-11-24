@@ -33,6 +33,7 @@ const EXPECTED_PLUGINS = [
   { id: 'tool-todo', name: '@deepseek-ai/dsh-tool-todo' },
   { id: 'tool-web', name: '@deepseek-ai/dsh-tool-web' },
   { id: 'tool-schedule', name: '@deepseek-ai/dsh-tool-schedule' },
+  { id: 'tool-subagent-fork', name: '@deepseek-ai/dsh-tool-subagent' },
   { id: 'planning', name: 'cordis:group' },
   { id: 'workflow', name: 'cordis:group' },
 ] as const
@@ -130,15 +131,15 @@ describe('cordis.patch.yml preset 配置', () => {
 
   it('preset.plugins 恰好 10 项，id / name 顺序与契约一致', () => {
     const plugins = presetPlugins()
-    expect(plugins).toHaveLength(12)
+    expect(plugins).toHaveLength(13)
     expect(plugins.map((item) => item.id)).toEqual(EXPECTED_PLUGINS.map((item) => item.id))
     expect(plugins.map((item) => item.name)).toEqual(EXPECTED_PLUGINS.map((item) => item.name))
   })
 
-  it('数量守卫：preset.plugins 少于 10 项或多于 10 项都失败', () => {
+  it('数量守卫：preset.plugins 少于 13 项或多于 13 项都失败', () => {
     const plugins = presetPlugins()
-    expect(plugins.length, `工具数不足 12（当前 ${plugins.length} 项）`).toBeGreaterThanOrEqual(12)
-    expect(plugins.length, `工具数超过 12（当前 ${plugins.length} 项）`).toBeLessThanOrEqual(12)
+    expect(plugins.length, `工具数不足 13（当前 ${plugins.length} 项）`).toBeGreaterThanOrEqual(13)
+    expect(plugins.length, `工具数超过 13（当前 ${plugins.length} 项）`).toBeLessThanOrEqual(13)
   })
 
   it('tool-todo 固定 allowParallelInProgress: false', () => {
@@ -147,30 +148,32 @@ describe('cordis.patch.yml preset 配置', () => {
     expect(configOf(todo as PatchPlugin).allowParallelInProgress).toBe(false)
   })
 
-  it('除 tool-todo 与 cordis:group 外不得带 config（防止误加覆盖）', () => {
+  it('除 tool-todo、tool-subagent-fork 与 cordis:group 外不得带 config（防止误加覆盖）', () => {
     const groups = new Set(['planning', 'workflow'])
-    const others = presetPlugins().filter((item) => item.id !== 'tool-todo' && !groups.has(String(item.id)))
+    const exempt = new Set(['tool-todo', 'tool-subagent-fork'])
+    const others = presetPlugins().filter((item) => !exempt.has(String(item.id)) && !groups.has(String(item.id)))
     expect(others.length).toBeGreaterThan(0)
     for (const item of others) {
       expect(item.config, `"${String(item.id)}" 不应带 config`).toBeUndefined()
     }
   })
 
-  it('工具面必须含 tool-web，且不得出现 tool-subagent', () => {
+  it('工具面必须含 tool-web 与 fork 工具，且不得出现 spawn 的 tool-subagent', () => {
     const ids = presetPlugins().map((item) => item.id)
     expect(ids).toContain('tool-web')
     expect(ids).not.toContain('tool-subagent')
-    expect(presetPlugins().map((item) => item.name)).not.toContain('@deepseek-ai/dsh-tool-subagent')
+    expect(ids).toContain('tool-subagent-fork')
+    expect(presetPlugins().map((item) => item.name)).toContain('@deepseek-ai/dsh-tool-subagent')
   })
 })
 
 describe('cordis.patch.yml 禁词', () => {
-  it('全文不出现 rsi-agent / complete / tool-subagent', () => {
+  it('全文不出现 rsi-agent / complete / spawn 的 tool-subagent', () => {
     expect(SOURCE).not.toMatch(/rsi-agent/)
     // 只禁 YAML 字段形式的 complete（preset 覆盖开关）；plan-mode 的官方
     // section 文案里有「decision-complete」，那是模型提示词，不是配置。
     expect(SOURCE).not.toMatch(/^\s*complete\s*:/m)
-    expect(SOURCE).not.toMatch(/tool-subagent/)
+    expect(SOURCE).not.toMatch(/id:\s*tool-subagent\s*$/m)
   })
 })
 
