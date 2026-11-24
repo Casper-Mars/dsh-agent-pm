@@ -12,10 +12,14 @@
 # 三层判据：
 #   1. 安装准入：dsh 用包自带的 engines.dsh / peerDependencies 判定兼容性，
 #      不满足会直接拒绝安装并打印 requirements（这是 manifest 层）；
-#   2. patch 组合：`dsh --profile <p> --dump-config` 能把 dev-domain 与 3 个 preset
-#      组进配置树（这是装配层，schema 变更会在这里炸）；
-#   3. 运行时装配：冷启动 profile，断言 13 个 Skill 与 3 个 preset 真的注册成功
+#   2. patch 组合：`dsh --profile <p> --dump-config` 能把 preset 注册表与 preset `pm`
+#      组进配置树（这是装配层，schema 变更会在这里炸）；期望值**不写死**，
+#      由 `cordis.patch.yml` 派生（见 read_needles），patch 结构变则期望自动跟变；
+#   3. 运行时装配：冷启动 profile，断言 skills 服务契约与 preset roster
 #      （这是运行层，服务契约变更 / 模块解析失败会在这里暴露）。
+#
+# 调试入口：`bash scripts/dsh-compat.sh --print-needles` 只打印第 2 层派生出的期望值，
+# 不发网络请求；`COMPAT_PATCH_FILE=<path>` 可换成别的 patch（tests/compat-needles.spec.ts 用它做防回归）。
 #
 # 退出码：全部目标通过为 0，任一目标失败为 1，用法错误为 2。
 set -uo pipefail
@@ -24,6 +28,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROFILE="compat"
 FAILED=0
 RESULTS=()
+PATCH_FILE="${COMPAT_PATCH_FILE:-$ROOT/cordis.patch.yml}"
 
 log() { printf '\n\033[1m[dsh-compat] %s\033[0m\n' "$*"; }
 ok() { printf '\033[32m[dsh-compat] PASS %s\033[0m\n' "$*"; }
@@ -36,6 +41,55 @@ fi
 if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
   echo "需要 node 与 npm 在 PATH 中" >&2
   exit 2
+fi
+
+# 第 2 层（patch 组合）的期望值：从 `cordis.patch.yml` 这一份真源派生，
+# **不写死** plugin id 与默认 preset —— 写死的期望值会在 patch 结构演进后变成假红灯。
+# 派生规则：每个 insert 项的 `id` → `id: <id>`；preset 注册表的 `config.default` → `default: <值>`。
+read_needles() {
+  (cd "$ROOT" && node --input-type=module -e '
+    import { readFileSync } from "node:fs"
+    import { parse } from "yaml"
+
+    const [, patchFile] = process.argv
+    const entries = parse(readFileSync(patchFile, "utf8")) ?? []
+    const inserted = Array.isArray(entries)
+      ? entries.flatMap((entry) => (Array.isArray(entry?.insert) ? entry.insert : []))
+      : []
+    const needles = []
+    for (const item of inserted) {
+      if (typeof item?.id === "string" && item.id !== "") needles.push(`id: ${item.id}`)
+      if (item?.name === "@deepseek-ai/dsh-agent-preset-registry") {
+        const value = item?.config?.default
+        if (typeof value === "string" && value !== "") needles.push(`default: ${value}`)
+      }
+    }
+    process.stdout.write(needles.length === 0 ? "" : `${needles.join("\n")}\n`)
+  ' "$PATCH_FILE")
+}
+
+# 派生结果为空说明 patch 结构与派生规则脱节了：宁可报错，也不能让第 2 层空过。
+collect_needles() {
+  local derived
+  if [ ! -f "$PATCH_FILE" ]; then
+    err "找不到 patch 文件：$PATCH_FILE"
+    return 1
+  fi
+  if ! derived="$(read_needles)"; then
+    err "无法从 $PATCH_FILE 派生组合层期望值（YAML 解析失败？）"
+    return 1
+  fi
+  if [ -z "$derived" ]; then
+    err "$PATCH_FILE 未派生出任何组合层期望值（insert 结构无法识别）"
+    return 1
+  fi
+  printf '%s\n' "$derived"
+}
+
+# 只打印派生出的期望值，不发网络请求、不打包：给 tests/ 做「结构变了期望是否跟着变」的回归。
+if [ "${1:-}" = "--print-needles" ]; then
+  collect_needles
+  exit $?
 fi
 
 # 发布内容依赖 dist-server/：缺了就现编译，避免用旧产物做兼容结论。
@@ -51,6 +105,9 @@ if [ -z "$TARBALL" ] || [ ! -f "${TMPDIR:-/tmp}/$TARBALL" ]; then
 fi
 TARBALL="${TMPDIR:-/tmp}/$TARBALL"
 log "打包完成：$TARBALL"
+
+# 第 2 层的期望值只派生一次，所有目标共用；派生失败直接终止（不带着空期望跑 combo）。
+NEEDLES="$(collect_needles)" || exit 1
 
 # 每个目标版本一个完全隔离的 dsh 安装目录 + DSH_HOME，互不污染。
 check_one() {
@@ -91,14 +148,16 @@ check_one() {
     fi
 
     local missing=0
-    for needle in "id: pm-domain" "default: pm" "id: preset-pm"; do
+    local needle
+    while IFS= read -r needle; do
+      [ -n "$needle" ] || continue
       if ! grep -qF "$needle" "$work/dump.yml"; then
-        err "组合结果缺少「$needle」"
+        err "组合结果缺少「$needle」（期望值派生自 $(basename "$PATCH_FILE")）"
         missing=1
       fi
-    done
+    done <<< "$NEEDLES"
     [ "$missing" -eq 0 ] || exit 1
-    echo "[dsh-compat] PASS patch 组合（pm-domain + preset）"
+    echo "[dsh-compat] PASS patch 组合（派生期望全部命中）"
 
     # 3) 运行时：探针必须从 dsh 安装目录运行，裸导入 @deepseek-ai/dsh 才能解析
     cp "$ROOT/scripts/compat-probe.mjs" "$work/probe.mjs"
@@ -110,7 +169,7 @@ check_one() {
       err "运行时探针未通过（dsh $resolved）"
       exit 1
     fi
-    echo "[dsh-compat] PASS 运行时装配（10 Skill + 1 preset）"
+    echo "[dsh-compat] PASS 运行时装配（skills 服务契约 + preset roster）"
   )
 
   local status=$?
