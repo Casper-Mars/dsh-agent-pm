@@ -4,9 +4,9 @@
  * 与 `dsh-agent-dev/src/plugin.ts @ bc78f02` 同源：只替换领域常量、插件 id 与
  * 日志 / fiber 标签，注册语义、回滚、LIFO 卸载、depth gate 一律不变。
  *
- * 本包是 `pm` 的宿主层插件：
- *   - `agents`：监听 agent 生命周期，只给 **depth 0** 且 preset 为 `pm` 的根会话
- *     注入 PM persona。
+ * 宿主层遗留插件：persona 与领域 Skill 现在都由 preset 层的 `pm-assets`
+ * （`dsh-agent-pm/assets`）注册，所以 `pm-domain` 已不出现在 `cordis.patch.yml`；
+ * 本插件的 `apply()` 只在被误挂到宿主层时 warn（不再监听 `agents` / 注入 persona）。
  *
  * 领域 Skill 不在本层注册：它随 `preset-pm` 挂载 `dsh-agent-pm/assets`，
  * 注册进该 preset 的 scope 层，这样单 host 装多个角色包时技能不会并成一份。
@@ -22,7 +22,7 @@ import {
   type SkippedFirmwareSkill,
 } from './firmware.js'
 
-/** 插件唯一标识（必须与 `cordis.patch.yml` 中的 `pm-domain` 一致）。 */
+/** 宿主层遗留插件 id：装配已改由 preset 层 `pm-assets` 承担，`cordis.patch.yml` 里不再有它。 */
 export const name = 'pm-domain'
 
 /** 本包提供的 preset id（与 preset 定义、kit 的 presetByKind 保持同名）。 */
