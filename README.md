@@ -5,7 +5,7 @@
 `dsh-agent-pm` 是 dsh 的**市场部经理（产品经理）领域原生单包**：装这一个包，就能得到
 
 - **PM persona**：由 preset 层的 `pm-assets` 注册进该 preset 的 system prompt，随 preset 组合启停；
-- **10 个只读领域 Skill**：覆盖洞察、定义、排序、交接、发布、度量、复盘、市场、仓库运营与组织沟通；
+- **11 个只读领域 Skill**：覆盖洞察、定义、排序、交接、发布、度量、复盘、市场、仓库运营与组织沟通；
 - **1 个 agent preset**：`pm`，由 `cordis.patch.yml` 装配。
 
 覆盖范围：机会发现 → 需求定义 → 优先级 → 交接与验收。发布说明、指标口径、复盘材料作为
@@ -33,12 +33,12 @@ dsh plugin --profile <p> add link:$PWD
 ### 装完核对组合树
 
 ```bash
-dsh --profile <p> --dump-config | grep -E "pm-domain|preset-pm"
+dsh --profile <p> --dump-config | grep -E "agent-preset-registry|preset-pm|pm-assets"
 ```
 
 应能看到 preset `pm` 的首项
 `pm-assets`（`dsh-agent-pm/assets`）、`agent-preset-registry.default: pm`。
-以及唯一的 preset `pm`。
+以及唯一的 preset `pm`。宿主层不再有领域插件，只有 preset 注册表与这一个 preset。
 
 ## 技能
 
@@ -66,7 +66,7 @@ Skill 的 `description` 与 `whenToUse` 只描述本技能边界，不点名其�
 
 ```bash
 pnpm typecheck        # tsc --noEmit
-pnpm test             # vitest run：7 个 spec、139 个用例
+pnpm test             # vitest run：8 个 spec、146 个用例
 pnpm build            # 产出 dist-server/（含 cordis.patch.yml 副本）
 pnpm verify:install   # 59/59 PASS：11 个 SKILL.md + 15 个 asset + 33 个 reference
 make check            # build → test → verify → pack
@@ -75,7 +75,7 @@ make check            # build → test → verify → pack
 | 命令 | 成功判据 |
 |------|----------|
 | `pnpm typecheck` | 退出码 0，无类型错误 |
-| `pnpm test` | **139 passed**、0 failed、0 skipped，退出码 0 |
+| `pnpm test` | **146 passed**、0 failed、0 skipped，退出码 0 |
 | `pnpm build` | 退出码 0，产出 `dist-server/index.js` 与 `dist-server/cordis.patch.yml` |
 | `pnpm verify:install` | 59 行 `PASS`、退出码 0；任一 `FAIL` 退出码 1；目录 / 参数错误退出码 2 |
 | `make check` | 上述 build / test / verify 全通过，且 `npm pack --dry-run` 清单正常 |
@@ -95,7 +95,7 @@ node scripts/verify-install.mjs --assets /path/to/skills
 ├─ .npmrc                        # pnpm 安装策略
 ├─ LICENSE                       # Apache-2.0
 ├─ Makefile                      # make check / stage-dry / publish
-├─ cordis.patch.yml              # bundle patch：pm-domain + 注册表默认值 + preset-pm
+├─ cordis.patch.yml              # bundle patch：preset 注册表默认值 + preset-pm（装配期唯一真源）
 ├─ package.json                  # dsh.bundle.patch 指向 cordis.patch.yml；files 含 skills/
 ├─ pnpm-lock.yaml
 ├─ pnpm-workspace.yaml
@@ -125,7 +125,7 @@ node scripts/verify-install.mjs --assets /path/to/skills
 ├─ scripts/
 │  ├─ copy-assets.mjs            # 把 cordis.patch.yml 复制进 dist-server/
 │  └─ verify-install.mjs         # 59 项包内自检（CLI + 导出纯函数）
-├─ tests/                        # 5 个 spec：domain / plugin / patch / firmware-registration / verify-install
+├─ tests/                        # 8 个 spec：domain / plugin / patch / firmware-registration / verify-install / compat-probe / compat-needles / rule-integrity
 ├─ AGENTS.md
 └─ README.md
 ```
@@ -172,5 +172,10 @@ node scripts/verify-install.mjs --assets /path/to/skills
 
 ```bash
 pnpm compat                 # 校验 npm latest
-pnpm compat 0.2.2-rc.2      # 校验指定版本
+pnpm compat 0.2.1-rc.2      # 校验指定版本
+bash scripts/dsh-compat.sh --print-needles   # 只打印组合层派生出的期望值（不发网络请求）
 ```
+
+组合层的期望值**不写死**：`scripts/dsh-compat.sh` 从 `cordis.patch.yml` 派生 insert id 与注册表默认
+preset，patch 结构一变期望值自动跟变；`tests/compat-needles.spec.ts` 钉死这条性质（退回写死、或结构
+改了期望没跟上，先红）。历史上它写死过宿主层领域插件的 id，patch 把领域插件挪到 preset 层后就成了假红灯。
