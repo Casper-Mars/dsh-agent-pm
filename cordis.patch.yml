@@ -27,6 +27,11 @@
         plugins:
           - id: pm-assets
             name: dsh-agent-pm/assets
+          # 工具呈现方式（agent scope 级）：PM 也用 PTC，长文档/多工具流程在 run_code 内组合。
+          - id: tool-presentation
+            name: '@deepseek-ai/dsh-agent-tool-presentation'
+            config:
+              mode: ptc
           - id: echuan-tools
             name: dsh-echuan/tools/requester
           - id: task-tools
